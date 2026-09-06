@@ -1,12 +1,14 @@
 # games/
 
-Các game trong workspace, gom về một chỗ ngày 2026-09-06.
+Platform "Supabase cho game": backend realtime/storage dùng chung cho nhiều game,
+cộng lớp AI Forge sinh game từ prompt. Repo này chứa **thiết kế + dây chuyền skill**;
+mỗi game là một repo riêng và là test case của abstraction.
 
-| Thư mục | Kiểu | Git | Server |
+| Thư mục | Kiểu | Git | Live |
 |---|---|---|---|
-| `tank-battle/` | Co-op 4P realtime (WebSocket, server authoritative) | [phanngoc/tank-battle-90](https://github.com/phanngoc/tank-battle-90) | `node server.js` — port 3000 (0.0.0.0) |
-| `castle/` | 1P canvas, Castle Busters clone, round 60s | chưa init | `node server.js` — port 8789 (127.0.0.1) |
-| `rumba/` | 1P puzzle (grid, nhiều mode/độ khó) | chưa init | `node server.js` — port 8788 (127.0.0.1) |
+| `tank-battle/` | Co-op 4P realtime, server authoritative 30Hz | [phanngoc/tank-battle-90](https://github.com/phanngoc/tank-battle-90) | [tank.bomclaw.org](https://tank.bomclaw.org) |
+| `castle/` | 1P canvas castle-battle, vòng 60s | repo riêng | [castle.bomclaw.org](https://castle.bomclaw.org) |
+| `rumba/` | 1P puzzle logic (Binairo family) | repo riêng | [rumba.bomclaw.org](https://rumba.bomclaw.org) |
 
 ## Tài liệu
 

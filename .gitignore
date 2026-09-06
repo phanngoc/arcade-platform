@@ -6,6 +6,11 @@ node_modules/
 *.log
 *-server.log
 
-# tank-battle có repo riêng: github.com/phanngoc/tank-battle-90
-# Không nhúng vào đây để tránh embedded-repo và giữ được remote/history của nó.
+# Mỗi game có repo riêng — không nhúng vào đây để tránh embedded-repo
+# và giữ được remote/history của từng game.
+#   tank-battle -> github.com/phanngoc/tank-battle-90
+#   castle      -> repo riêng
+#   rumba       -> repo riêng
 /tank-battle/
+/castle/
+/rumba/
