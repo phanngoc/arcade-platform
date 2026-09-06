@@ -1,0 +1,30 @@
+{
+  "name": "arcade",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "dev": "node packages/cli/src/index.ts dev",
+    "migrate": "node scripts/migrate.ts",
+    "test": "node --env-file=.env --test packages/core/test/redis-keys.test.ts packages/services/test/api.test.ts",
+    "lint:deps": "node scripts/lint-deps.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:sdk": "node packages/sdk/build.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "fastify": "^5.2.0",
+    "ioredis": "^5.4.2",
+    "jose": "^5.9.6",
+    "postgres": "^3.4.5"
+  }
+}

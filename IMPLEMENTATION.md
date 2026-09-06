@@ -2,7 +2,8 @@
 
 > Tài liệu này **chốt các lựa chọn còn mở** trong [PLATFORM_DESIGN.md](PLATFORM_DESIGN.md) và mô tả đủ chi tiết
 > để bắt đầu code. Phạm vi: **M0 (nền) + M1 (realtime)**. M2+ chỉ ghi chỗ nào cần chừa đường.
-> Ngày: 2026-09-06.
+> Ngày: 2026-09-06. **Trạng thái: M0 xong** (10/10 việc) — xem §10 để biết những gì
+> thực tế khác với kế hoạch. M1 chưa bắt đầu.
 
 ---
 
@@ -521,3 +522,73 @@ prediction/reconciliation, binary state, matchmaking theo MMR (chỉ có `join t
 ngẫu nhiên), storage/UGC, dashboard web (dùng `arcade` CLI + `/metrics`), billing, moderation.
 
 Mỗi thứ trên chỉ được mở khi có **số đo** hoặc **khách hàng** đòi — không mở vì "kiến trúc đẹp hơn".
+
+
+---
+
+## 10. Nhật ký M0 — thực tế khác kế hoạch chỗ nào
+
+M0 chạy xong 10/10 việc. Bốn điều học được khi code thật, ghi lại vì chúng đổi thiết kế:
+
+### 10.1 Owner của bảng BỎ QUA RLS — policy ở 001 suýt thành trang trí
+
+Postgres mặc định cho owner của bảng bỏ qua row level security. App kết nối bằng
+chính user `arcade` (owner) nên mọi `create policy` ở `001_init.sql` **không có
+tác dụng nào**. Test "người chơi B đọc save của A" sẽ pass sai.
+
+Sửa bằng `003_app_role.sql`: tách hai vai — `arcade` (owner) cho migration và tác vụ
+hệ thống (write-behind ghi thay nhiều người chơi, cố ý nằm ngoài RLS), `arcade_app`
+(không owner) cho mọi truy vấn theo request. `packages/core/src/pg.ts` xuất hai
+đường tương ứng: `sql` và `withActor`.
+
+**Bài học:** bật RLS không đủ, phải kiểm chứng bằng test hai người chơi. Nếu chỉ
+đọc code thì lỗi này vô hình.
+
+### 10.2 Node 24 chạy TypeScript trực tiếp → bỏ được build step
+
+Kế hoạch định dùng Node 22 + tsc. Node 24 trên máy chạy `.ts` bằng type-stripping,
+nên **server không có build step** — đúng tinh thần "3 game không có build step".
+Giá phải trả: chỉ dùng được cú pháp xoá-được. `constructor(public x: T)` (parameter
+property) làm vỡ lúc chạy. `erasableSyntaxOnly: true` trong tsconfig bắt lỗi này ở
+typecheck thay vì để vỡ trong production.
+
+SDK vẫn cần esbuild vì phải ra bản IIFE cho `<script src>`.
+
+### 10.3 Tách hàm thuần khỏi module có kết nối
+
+`packages/core/src/redis.ts` vừa định nghĩa quy ước tên key vừa mở kết nối. Test quy
+ước đặt tên (hàm thuần) import file đó → kết nối Redis giữ event loop sống → test
+runner treo 90 giây rồi báo "Promise resolution is still pending".
+
+Tách `keys.ts` (thuần, test được không cần hạ tầng) khỏi `redis.ts` (kết nối).
+Quy tắc chung: **module có side effect lúc import không được chứa logic cần test riêng.**
+
+### 10.4 Hook auth chạy cả cho route không khớp
+
+`app.addHook('preHandler')` của Fastify chạy cho cả request không khớp route nào, nên
+mọi URL sai trả **401 thay vì 404** — gây nhiễu log và lộ thông tin không cần thiết.
+Sửa bằng `if (!req.routeOptions?.url) return` ở đầu hook.
+
+### 10.5 Kết quả đo được
+
+| Hạng mục | Kết quả |
+|---|---|
+| SDK bản IIFE | **1,7KB gzip** (ngân sách 12KB) |
+| Test | **17/17 pass** trên Postgres + Redis thật, không mock |
+| Typecheck | sạch, `erasableSyntaxOnly` bật |
+| Luật phụ thuộc | không có import xuyên biên giới `services/` ⊥ `roomd/` |
+| castle + rumba trên platform | SDK khởi tạo, guest auth, nộp điểm, đọc bảng xếp hạng — verify bằng browser thật |
+| Redis chết rồi sống lại | bảng xếp hạng nạp lại đủ **cả điểm lẫn tên** từ Postgres |
+| Path traversal (`%2e%2e`, `..%2f`) | bị chặn, trả `PATH_ESCAPE` |
+
+### 10.6 Chưa làm, có lý do
+
+- **`server.js` của castle/rumba vẫn còn.** Platform phục vụ được cả hai game tại
+  `/g/castle/` và `/g/rumba/`, nhưng 3 site đang live qua launchd + Cloudflare tunnel.
+  Chuyển traffic thật sang platform là quyết định vận hành riêng: cần platform chạy
+  dưới launchd, có `.env` production, và trỏ lại ingress. Không tự làm điều đó với
+  server hạng dev.
+- **Cổng 8090 thay vì 8080** — nginx trên máy này đã chiếm 8080.
+- **Refresh token là JWT stateless** → chưa thu hồi được trước hạn. Khi cần: lưu `jti`
+  vào Redis và kiểm trong `/v1/auth/refresh`.
+- **`/v1/auth/link` chưa gửi OTP thật** — mới gắn email và giữ nguyên `player_id`.

@@ -14,3 +14,9 @@ node_modules/
 /tank-battle/
 /castle/
 /rumba/
+
+# implement
+node_modules/
+.env
+dist/
+packages/sdk/dist/
