@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f1420">
+<title>Rumba — Câu đố logic</title>
+<meta name="description" content="Rumba: câu đố logic điền hai biểu tượng theo luật cân bằng, không ba ô liền nhau và ràng buộc = / ×.">
+<style>
+  :root{
+    --bg:#0f1420; --bg2:#141b2b; --panel:#1a2233; --panel2:#212c42;
+    --tile:#26314a; --tile-line:#334166;
+    --ink:#eaf0fb; --muted:#8b97b5; --muted2:#5f6c8c;
+    --accent:#a99bff; --accent-ink:#221c4a;
+    --sun-a:#ffce54; --sun-b:#f6903d; --sun-ink:#5a3406;
+    --moon-a:#7b8cff; --moon-b:#4b57d6; --moon-ink:#0b1136;
+    --err:#ff6b7d; --ok:#4bd6a0;
+    --gap:16px; --cell:44px; --radius:14px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; height:100%}
+  body{
+    background:radial-gradient(120% 90% at 50% -10%, #1a2237 0%, var(--bg) 55%) fixed;
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    padding:max(10px,env(safe-area-inset-top)) 12px calc(14px + env(safe-area-inset-bottom));
+    user-select:none; -webkit-user-select:none;
+    overflow-x:hidden;
+  }
+  .wrap{width:100%; max-width:480px; display:flex; flex-direction:column; gap:14px}
+
+  /* ---- top bar ---- */
+  header{display:flex; align-items:center; gap:10px}
+  .logo{display:flex; align-items:center; gap:9px; font-weight:800; letter-spacing:.5px; font-size:22px}
+  .logo .mark{
+    width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--sun-a),var(--moon-b));
+    box-shadow:0 4px 14px rgba(123,140,255,.35);
+    font-size:16px; color:#1b1330; font-weight:900;
+  }
+  .grow{flex:1}
+  .icon-btn{
+    width:40px;height:40px;border-radius:12px;border:1px solid var(--tile-line);
+    background:var(--panel); color:var(--ink); font-size:18px; cursor:pointer;
+    display:grid; place-items:center; transition:.15s;
+  }
+  .icon-btn:active{transform:scale(.93)}
+
+  /* ---- meta row ---- */
+  .meta{
+    display:flex; align-items:stretch; gap:10px; justify-content:space-between;
+  }
+  .chip{
+    background:var(--panel); border:1px solid var(--tile-line); border-radius:12px;
+    padding:8px 12px; display:flex; flex-direction:column; align-items:center; gap:2px; flex:1; min-width:0;
+  }
+  .chip .k{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px}
+  .chip .v{font-size:19px; font-weight:800; font-variant-numeric:tabular-nums; white-space:nowrap}
+  .chip.timer .v{color:var(--accent)}
+
+  /* segmented controls */
+  .segs{display:flex; gap:8px}
+  .seg{
+    flex:1; display:flex; background:var(--panel); border:1px solid var(--tile-line);
+    border-radius:12px; padding:4px; gap:4px;
+  }
+  .seg button{
+    flex:1; border:0; background:transparent; color:var(--muted); font-weight:700;
+    padding:8px 6px; border-radius:9px; cursor:pointer; font-size:13px; transition:.15s;
+  }
+  .seg button.on{background:var(--panel2); color:var(--ink); box-shadow:0 1px 0 rgba(255,255,255,.04) inset}
+  .seg button.on.diff{background:linear-gradient(135deg,var(--accent),#7b8cff); color:var(--accent-ink)}
+
+  /* ---- board ---- */
+  .board-holder{display:flex; justify-content:center; padding:6px 0 2px}
+  #board{
+    display:grid; gap:0;
+    background:transparent; touch-action:manipulation;
+  }
+  .tile{
+    background:var(--tile); border-radius:var(--radius); position:relative; cursor:pointer;
+    display:grid; place-items:center; transition:transform .08s, background .12s, box-shadow .12s;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.03);
+  }
+  .tile:active{transform:scale(.94)}
+  .tile.given{cursor:default; background:#1d2740}
+  .tile.given:active{transform:none}
+  .tile.sun{background:radial-gradient(120% 120% at 30% 25%,var(--sun-a),var(--sun-b))}
+  .tile.moon{background:radial-gradient(120% 120% at 30% 25%,var(--moon-a),var(--moon-b))}
+  .tile.err{box-shadow:inset 0 0 0 2.5px var(--err), 0 0 12px rgba(255,107,125,.35)}
+  .tile.hintflash{animation:hintpulse .9s ease}
+  @keyframes hintpulse{0%{box-shadow:inset 0 0 0 3px var(--ok)}100%{box-shadow:inset 0 0 0 0 transparent}}
+  .tile.lock::after{content:""; position:absolute; right:6px; top:6px; width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.35)}
+  .glyph{width:58%; height:58%; display:block; pointer-events:none}
+  .sun .glyph{filter:drop-shadow(0 1px 1px rgba(90,52,6,.4))}
+  .moon .glyph{filter:drop-shadow(0 1px 1px rgba(11,17,54,.5))}
+
+  .gutter{display:grid; place-items:center; pointer-events:none}
+  .badge{
+    font-weight:900; font-size:15px; line-height:1; color:var(--ink);
+    background:var(--bg2); border:1px solid var(--tile-line);
+    width:24px;height:24px;border-radius:50%; display:grid; place-items:center;
+    box-shadow:0 2px 6px rgba(0,0,0,.35); z-index:2;
+  }
+  .badge.eq{color:#bfe9d5}
+  .badge.ne{color:#ffc2ca}
+  .badge.err{border-color:var(--err); color:var(--err); box-shadow:0 0 10px rgba(255,107,125,.5)}
+
+  /* ---- action buttons ---- */
+  .actions{display:grid; grid-template-columns:repeat(4,1fr); gap:8px}
+  .act{
+    background:var(--panel); border:1px solid var(--tile-line); border-radius:14px;
+    color:var(--ink); padding:11px 4px 9px; cursor:pointer; display:flex; flex-direction:column;
+    align-items:center; gap:4px; font-size:12px; font-weight:700; transition:.15s;
+  }
+  .act:active{transform:scale(.95)}
+  .act .ico{font-size:20px}
+  .act:disabled{opacity:.4; cursor:default}
+  .act.primary{background:linear-gradient(135deg,var(--accent),#7b8cff); color:var(--accent-ink); border-color:transparent}
+
+  .hint-line{min-height:18px; text-align:center; color:var(--muted); font-size:13px}
+  .hint-line b{color:var(--accent)}
+
+  footer{color:var(--muted2); font-size:11px; text-align:center; line-height:1.5; margin-top:2px}
+  footer a{color:var(--muted)}
+
+  /* ---- win overlay ---- */
+  .overlay{
+    position:fixed; inset:0; background:rgba(6,9,16,.72); backdrop-filter:blur(6px);
+    display:none; align-items:flex-end; justify-content:center; z-index:50;
+  }
+  .overlay.show{display:flex; animation:fade .2s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .sheet{
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    width:100%; max-width:480px; border-radius:24px 24px 0 0; padding:24px 22px calc(26px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--tile-line); animation:rise .28s cubic-bezier(.2,.9,.3,1);
+    text-align:center;
+  }
+  @keyframes rise{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  .sheet h2{margin:2px 0 2px; font-size:26px}
+  .sheet .sub{color:var(--muted); margin-bottom:18px; font-size:14px}
+  .win-stats{display:flex; gap:10px; margin:0 0 20px}
+  .win-stats .chip{background:var(--bg2)}
+  .sheet .row{display:flex; gap:10px}
+  .sheet .btn{
+    flex:1; border:0; border-radius:14px; padding:14px; font-size:15px; font-weight:800; cursor:pointer;
+    background:var(--panel); color:var(--ink); border:1px solid var(--tile-line);
+  }
+  .sheet .btn.primary{background:linear-gradient(135deg,var(--accent),#7b8cff); color:var(--accent-ink); border-color:transparent}
+  .confetti{position:fixed; inset:0; pointer-events:none; z-index:60; overflow:hidden}
+  .confetti i{position:absolute; width:9px;height:14px; top:-20px; opacity:.95; border-radius:2px; animation:fall linear forwards}
+  @keyframes fall{to{transform:translateY(105vh) rotate(720deg); opacity:1}}
+
+  /* help modal */
+  .modal{position:fixed; inset:0; background:rgba(6,9,16,.75); backdrop-filter:blur(4px); display:none; align-items:center; justify-content:center; z-index:55; padding:18px}
+  .modal.show{display:flex}
+  .card{background:var(--panel); border:1px solid var(--tile-line); border-radius:20px; max-width:420px; width:100%; padding:22px; max-height:86vh; overflow:auto}
+  .card h3{margin:0 0 12px; font-size:20px}
+  .card p{color:var(--muted); line-height:1.6; font-size:14px; margin:10px 0}
+  .card .rule{display:flex; gap:12px; align-items:flex-start; margin:12px 0}
+  .card .rule .n{flex:0 0 26px;height:26px;border-radius:8px;background:var(--panel2);display:grid;place-items:center;font-weight:800;color:var(--accent)}
+  .card .close{margin-top:16px; width:100%; border:0; border-radius:12px; padding:13px; font-weight:800; background:linear-gradient(135deg,var(--accent),#7b8cff); color:var(--accent-ink); cursor:pointer}
+  .mini{display:inline-grid; grid-auto-flow:column; gap:4px; vertical-align:middle}
+  .mini span{width:18px;height:18px;border-radius:5px;display:inline-block}
+  .mini .s{background:linear-gradient(135deg,var(--sun-a),var(--sun-b))}
+  .mini .m{background:linear-gradient(135deg,var(--moon-a),var(--moon-b))}
+  .mini .e{background:var(--tile)}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo"><span class="mark">R</span>Rumba</div>
+      <div class="grow"></div>
+      <button class="icon-btn" id="dailyBtn" title="Câu đố hôm nay">📅</button>
+      <button class="icon-btn" id="helpBtn" title="Luật chơi">?</button>
+    </header>
+
+    <div class="segs">
+      <div class="seg" id="sizeSeg">
+        <button data-size="6" class="on">6×6</button>
+        <button data-size="8">8×8</button>
+      </div>
+      <div class="seg" id="diffSeg">
+        <button data-diff="easy" class="on diff">Dễ</button>
+        <button data-diff="medium">Vừa</button>
+        <button data-diff="hard">Khó</button>
+      </div>
+    </div>
+
+    <div class="meta">
+      <div class="chip timer"><span class="k">Thời gian</span><span class="v" id="timer">0:00</span></div>
+      <div class="chip"><span class="k" id="modeK">Chế độ</span><span class="v" id="modeV">Tự do</span></div>
+      <div class="chip"><span class="k">Còn lại</span><span class="v" id="remain">–</span></div>
+    </div>
+
+    <div class="board-holder"><div id="board"></div></div>
+
+    <div class="hint-line" id="hintLine"></div>
+
+    <div class="actions">
+      <button class="act" id="undoBtn"><span class="ico">↶</span>Hoàn tác</button>
+      <button class="act" id="eraseBtn"><span class="ico">🧹</span>Xóa hết</button>
+      <button class="act" id="hintBtn"><span class="ico">💡</span>Gợi ý</button>
+      <button class="act primary" id="newBtn"><span class="ico">✦</span>Ván mới</button>
+    </div>
+
+    <footer>
+      Điền mỗi hàng &amp; cột đủ hai biểu tượng, không để ba ô giống nhau liền nhau, tôn trọng dấu = và ×.<br>
+      Chạm để đổi ô: trống → ☀️ → 🌙 → trống. &nbsp;·&nbsp; Lấy cảm hứng từ Binairo / Tohu-wa-Vohu.
+    </footer>
+  </div>
+
+  <!-- win sheet -->
+  <div class="overlay" id="overlay">
+    <div class="sheet">
+      <h2 id="winTitle">Hoàn thành! 🎉</h2>
+      <div class="sub" id="winSub"></div>
+      <div class="win-stats">
+        <div class="chip"><span class="k">Thời gian</span><span class="v" id="winTime">0:00</span></div>
+        <div class="chip"><span class="k">Gợi ý</span><span class="v" id="winHints">0</span></div>
+        <div class="chip"><span class="k">Kỷ lục</span><span class="v" id="winBest">–</span></div>
+      </div>
+      <div class="row">
+        <button class="btn" id="winReplay">Chơi lại</button>
+        <button class="btn primary" id="winNext">Ván mới</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- help -->
+  <div class="modal" id="help">
+    <div class="card">
+      <h3>Luật chơi Rumba</h3>
+      <p>Điền vào lưới hai biểu tượng: <span class="mini"><span class="s"></span></span> mặt trời và <span class="mini"><span class="m"></span></span> mặt trăng. Chạm một ô để đổi: trống → ☀️ → 🌙 → trống. Ô có chấm sáng là gợi ý cho sẵn, không đổi được.</p>
+      <div class="rule"><div class="n">1</div><div>Mỗi <b>hàng</b> và mỗi <b>cột</b> có số mặt trời bằng số mặt trăng (một nửa – một nửa).</div></div>
+      <div class="rule"><div class="n">2</div><div>Không có <b>ba ô giống nhau</b> nằm liền nhau theo hàng hoặc cột.</div></div>
+      <div class="rule"><div class="n">3</div><div>Dấu <b>=</b> giữa hai ô: hai ô <b>giống nhau</b>. Dấu <b>×</b>: hai ô <b>khác nhau</b>.</div></div>
+      <p>Mỗi câu đố có <b>đúng một lời giải</b> — luôn suy luận được, không cần đoán (trừ mức Khó có thể cần thử).</p>
+      <button class="close" id="helpClose">Bắt đầu chơi</button>
+    </div>
+  </div>
+
+  <script src="engine.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

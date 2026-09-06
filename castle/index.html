@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0d1b2a">
+<title>Castle Busters — Đập Lâu Đài</title>
+<meta name="description" content="Đập vỡ lâu đài đối thủ! Nạp lính, bắn đại bác vòng cung, phá từng viên gạch. Bản clone web của Castle Busters.">
+<style>
+  :root{
+    --ink:#fff; --p:#33b5ff; --e:#ff5a5a; --gold:#ffd34d; --panel:#0e1f30cc;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none}
+  html,body{margin:0;height:100%;overflow:hidden;background:#0d1b2a;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,"Noto Sans",sans-serif;color:var(--ink);
+    touch-action:none;}
+  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  #game{display:block;background:#7ec0ee;width:100%;height:100%}
+
+  /* ---- top HUD ---- */
+  #hud{position:fixed;top:0;left:0;right:0;padding:calc(6px + env(safe-area-inset-top)) 10px 6px;
+    display:flex;align-items:center;gap:8px;pointer-events:none}
+  .side{flex:1;min-width:0}
+  .name{font-size:11px;font-weight:800;letter-spacing:.5px;text-shadow:0 1px 2px #0008;margin-bottom:2px}
+  .name.p{color:var(--p)} .name.e{color:var(--e);text-align:right}
+  .bar{height:12px;border-radius:8px;background:#0006;overflow:hidden;box-shadow:inset 0 0 0 2px #ffffff33}
+  .bar>i{display:block;height:100%;width:100%;transition:width .18s}
+  .bar.p>i{background:linear-gradient(90deg,#2ea3ef,#7fe0ff)}
+  .bar.e{transform:scaleX(-1)} .bar.e>i{background:linear-gradient(90deg,#ff3b3b,#ff9a6b)}
+  #timer{flex:0 0 auto;font-size:22px;font-weight:900;font-variant-numeric:tabular-nums;
+    background:#0b1622cc;border:2px solid #ffffff2a;border-radius:12px;padding:4px 12px;text-shadow:0 1px 2px #000a}
+  #timer.warn{color:#ffce54;animation:tick .5s steps(2) infinite}
+  @keyframes tick{50%{transform:scale(1.08)}}
+
+  /* ---- bottom deck ---- */
+  #deck{position:fixed;left:0;right:0;bottom:0;padding:8px 10px calc(10px + env(safe-area-inset-bottom));
+    display:flex;flex-direction:column;gap:8px;pointer-events:none}
+  #energyWrap{display:flex;align-items:center;gap:8px;pointer-events:none}
+  #energy{flex:1;height:14px;border-radius:9px;background:#0007;overflow:hidden;box-shadow:inset 0 0 0 2px #ffffff2a}
+  #energy>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ffb020,#ffe15a);transition:width .12s}
+  #energyNum{font-weight:900;font-size:13px;min-width:42px;text-align:right;color:var(--gold);text-shadow:0 1px 2px #000a}
+  .mute{pointer-events:auto;flex:0 0 auto;width:34px;height:24px;border:0;border-radius:8px;background:#12283dcc;
+    color:#fff;font-size:14px;cursor:pointer;display:grid;place-items:center;padding:0}
+  #cards{display:flex;gap:6px;pointer-events:auto}
+  .card{flex:1;min-width:0;background:#12283dEE;border:2px solid #ffffff26;border-radius:13px;padding:7px 2px 5px;
+    display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;transition:.12s;position:relative;overflow:hidden}
+  .card:active{transform:translateY(2px) scale(.97)}
+  .card .ic{font-size:23px;line-height:1}
+  .card .nm{font-size:9.5px;font-weight:800;opacity:.9;white-space:nowrap}
+  .card .cost{font-size:11px;font-weight:900;color:var(--gold)}
+  .card.disabled{opacity:.45;filter:grayscale(.5)}
+  .card .cd{position:absolute;inset:0;background:#0b1622cc;display:none;align-items:center;justify-content:center;font-weight:900}
+  .hint{position:fixed;left:0;right:0;top:52%;text-align:center;font-weight:800;color:#fff;
+    text-shadow:0 2px 6px #000b;pointer-events:none;font-size:14px;opacity:.0;transition:opacity .3s}
+
+  /* ---- overlays ---- */
+  .overlay{position:fixed;inset:0;background:radial-gradient(120% 90% at 50% 20%,#12314e 0%,#081420 70%);
+    display:none;flex-direction:column;align-items:center;justify-content:center;gap:18px;z-index:20;padding:24px;text-align:center}
+  .overlay.show{display:flex;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .logo{font-size:34px;font-weight:900;letter-spacing:.5px;line-height:1.05;
+    text-shadow:0 3px 0 #0006, 0 0 24px #33b5ff66}
+  .logo b{color:var(--gold)}
+  .sub{opacity:.85;max-width:340px;line-height:1.5;font-size:14px}
+  .btn{pointer-events:auto;border:0;border-radius:16px;padding:16px 34px;font-size:19px;font-weight:900;cursor:pointer;
+    background:linear-gradient(180deg,#ffd24a,#ffab2e);color:#5a3306;box-shadow:0 6px 0 #c47a12,0 10px 20px #0007}
+  .btn:active{transform:translateY(3px);box-shadow:0 3px 0 #c47a12,0 6px 12px #0007}
+  .btn.sec{background:linear-gradient(180deg,#4aa6ff,#2b7fe0);color:#04203f;box-shadow:0 6px 0 #1b5aa8,0 10px 20px #0007}
+  .result{font-size:44px;font-weight:900}
+  .result.win{color:#7fe08a;text-shadow:0 0 24px #37d15f88}
+  .result.lose{color:#ff7a7a;text-shadow:0 0 24px #ff404088}
+  .result.draw{color:#ffd34d}
+  .statline{opacity:.9;font-size:15px}
+  .row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+  .how{max-width:360px;text-align:left;background:#0e2136aa;border:1px solid #ffffff1f;border-radius:16px;padding:14px 16px;font-size:13.5px;line-height:1.6}
+  .how b{color:var(--gold)}
+</style>
+</head>
+<body>
+  <div id="stage"><canvas id="game"></canvas></div>
+
+  <div id="hud">
+    <div class="side">
+      <div class="name p">BẠN</div>
+      <div class="bar p"><i id="hpP"></i></div>
+    </div>
+    <div id="timer">1:00</div>
+    <div class="side">
+      <div class="name e">ĐỊCH</div>
+      <div class="bar e"><i id="hpE"></i></div>
+    </div>
+  </div>
+
+  <div id="deck">
+    <div id="energyWrap">
+      <div id="energy"><i></i></div>
+      <div id="energyNum">0 / 10</div>
+      <button id="muteBtn" class="mute" title="Bật/tắt âm">🔊</button>
+    </div>
+    <div id="cards"></div>
+  </div>
+
+  <div class="hint" id="hint">Chạm phía lâu đài địch để bắn 💥</div>
+
+  <!-- start -->
+  <div class="overlay show" id="startOv">
+    <div class="logo">CASTLE <b>BUSTERS</b><br><span style="font-size:16px;font-weight:800;opacity:.8">Đập Lâu Đài</span></div>
+    <div class="how">
+      🎯 <b>Mục tiêu:</b> phá lâu đài địch (bên phải) về 0% — hoặc còn nhiều máu hơn khi hết giờ.<br>
+      💥 <b>Đại bác:</b> <b>kéo</b> ở phía địch để ngắm (hiện đường bay) rồi thả để bắn phá gạch. Có hồi chiêu — combo phá liên tục để ăn điểm cao.<br>
+      🪖 <b>Nạp lính:</b> chạm thẻ ở dưới (tốn ⚡ tự hồi): 🐎 nhanh · 🛡️ cân bằng · 🏹 bắn xa · 💣 pháo phá gạch · 🪓 trâu bò.<br>
+      🏆 Thắng để lên <b>Màn</b> mới — địch mạnh dần.
+    </div>
+    <div id="startLevel" class="statline"></div>
+    <button class="btn" id="playBtn">CHƠI ▶</button>
+  </div>
+
+  <!-- end -->
+  <div class="overlay" id="endOv">
+    <div class="result" id="resultTxt">THẮNG!</div>
+    <div class="statline" id="endStat"></div>
+    <div class="statline" id="endScore"></div>
+    <div class="statline" id="endLevel" style="color:var(--gold);font-weight:800"></div>
+    <div class="row">
+      <button class="btn" id="againBtn">MÀN TIẾP ▶</button>
+    </div>
+  </div>
+
+  <script src="game.js?v=2"></script>
+</body>
+</html>

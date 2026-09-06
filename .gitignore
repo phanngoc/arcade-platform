@@ -1,0 +1,11 @@
+.DS_Store
+node_modules/
+.gstack/
+
+# Runtime artifacts
+*.log
+*-server.log
+
+# tank-battle có repo riêng: github.com/phanngoc/tank-battle-90
+# Không nhúng vào đây để tránh embedded-repo và giữ được remote/history của nó.
+/tank-battle/
