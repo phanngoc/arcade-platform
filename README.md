@@ -14,6 +14,7 @@ Các game trong workspace, gom về một chỗ ngày 2026-09-06.
 |---|---|
 | [PLATFORM_DESIGN.md](PLATFORM_DESIGN.md) | Thiết kế kỹ thuật: abstraction, realtime engine, data model, AI Forge, roadmap |
 | [BUSINESS_MODEL.md](BUSINESS_MODEL.md) | Thị trường, giá đối thủ, unit economics, bảng giá, 3 kịch bản tài chính, định giá, kill criteria |
+| [IMPLEMENTATION.md](IMPLEMENTATION.md) | Design cho implement M0+M1: stack đã chốt, cấu trúc repo, giao thức, migration, trình tự làm |
 | [SKILL_CHAIN.md](SKILL_CHAIN.md) | 5 skill làm game (`skills/`) và cách đóng gói vào platform |
 
 PLATFORM_DESIGN.md — thiết kế platform "Supabase cho game": backend realtime/storage

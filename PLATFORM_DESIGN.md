@@ -2,7 +2,7 @@
 
 > Bản thiết kế (design doc), chưa có code. Trạng thái: **draft để review**, không phải cam kết kỹ thuật.
 > Ngày: 2026-09-06 · Thư mục tham chiếu: `~/goterm-workspace/games/`
-> Đi kèm: [BUSINESS_MODEL.md](BUSINESS_MODEL.md) (thị trường, giá, định giá) · [SKILL_CHAIN.md](SKILL_CHAIN.md) (dây chuyền skill làm game = phần Forge)
+> Đi kèm: [IMPLEMENTATION.md](IMPLEMENTATION.md) (design cho implement M0+M1) · [BUSINESS_MODEL.md](BUSINESS_MODEL.md) (thị trường, giá, định giá) · [SKILL_CHAIN.md](SKILL_CHAIN.md) (dây chuyền skill làm game = phần Forge)
 
 ---
 
