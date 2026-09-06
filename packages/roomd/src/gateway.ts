@@ -26,6 +26,8 @@ type Conn = {
   lastPong: number
   pingId: number
   helloAt: number
+  /** Header của request nâng cấp — dùng để dựng link mời đúng host. */
+  headers: Record<string, string | string[] | undefined>
   /** Hàng đợi tuần tự hoá xử lý message của CHÍNH kết nối này. */
   chain: Promise<void>
 }
@@ -33,7 +35,13 @@ type Conn = {
 export type GatewayDeps = {
   manager: RoomManager
   verifyToken: (token: string) => Promise<{ playerId: string; gameId: string; isGuest: boolean }>
-  publicBaseUrl: string
+  /**
+   * Dựng link mời từ CHÍNH request nâng cấp WebSocket. Không dùng hằng số cấu
+   * hình: game chạy trên custom domain qua tunnel, nên link đúng phụ thuộc Host
+   * và x-forwarded-proto của request. Tiêm từ app/ vì việc tra host -> game
+   * nằm ở services, mà roomd không được import services.
+   */
+  inviteUrl: (gameId: string, code: string, headers: Record<string, string | string[] | undefined>) => Promise<string>
   log: (msg: string, extra?: Record<string, unknown>) => void
 }
 
@@ -47,10 +55,11 @@ export function attachGateway(server: Server, deps: GatewayDeps): { wss: WebSock
     c.ws.close(1008, code)
   }
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, upgradeReq) => {
     const c: Conn = {
       ws, playerId: null, gameId: null, isGuest: true, code: null, session: null,
       lastPong: Date.now(), pingId: 0, helloAt: Date.now(), chain: Promise.resolve(),
+      headers: upgradeReq.headers as Record<string, string | string[] | undefined>,
     }
     conns.add(c)
 
@@ -116,7 +125,7 @@ export function attachGateway(server: Server, deps: GatewayDeps): { wss: WebSock
         if (!ok) return fail(c, 'SESSION_INVALID')
         send(c.ws, {
           t: 'welcome', playerId, session: m.session, code: s.code,
-          url: inviteUrl(gameId, s.code), isHost: false,
+          url: await deps.inviteUrl(gameId, s.code, c.headers), isHost: false,
         })
         return
       }
@@ -148,9 +157,7 @@ export function attachGateway(server: Server, deps: GatewayDeps): { wss: WebSock
     }
   }
 
-  function inviteUrl(gameId: string, code: string): string {
-    return `${deps.publicBaseUrl}/g/${gameId}/?room=${code}`
-  }
+
 
   async function enter(c: Conn, code: string, name: string | null, isHost: boolean): Promise<void> {
     const gameId = c.gameId!, playerId = c.playerId!
@@ -167,7 +174,7 @@ export function attachGateway(server: Server, deps: GatewayDeps): { wss: WebSock
       send: (m) => send(c.ws, m),
       sendRaw: (frame) => { if (c.ws.readyState === 1) c.ws.send(frame) },
     }
-    send(c.ws, { t: 'welcome', playerId, session, code, url: inviteUrl(gameId, code), isHost })
+    send(c.ws, { t: 'welcome', playerId, session, code, url: await deps.inviteUrl(gameId, code, c.headers), isHost })
     room.addPlayer(conn)
   }
 

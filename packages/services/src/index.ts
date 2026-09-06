@@ -1,7 +1,7 @@
 export { authRoutes } from './auth/index.ts'
 export { saveRoutes } from './save/index.ts'
 export { leaderboardRoutes, flushAll, flushDirty } from './leaderboard/index.ts'
-export { bundleRoutes } from './bundle/index.ts'
+export { bundleRoutes, gameForHost } from './bundle/index.ts'
 export { telemetryRoutes } from './telemetry/index.ts'
 export { roomsRoutes } from './rooms/index.ts'
 export { submit as submitScore } from './leaderboard/store.ts'

@@ -1,0 +1,17 @@
+tunnel: a7aef662-ecba-423a-b34b-4f2e433f1e78
+credentials-file: /Users/ngocp/.cloudflared/a7aef662-ecba-423a-b34b-4f2e433f1e78.json
+
+ingress:
+  - hostname: tank.bomclaw.org
+    service: http://127.0.0.1:3000
+  - hostname: bot.bomclaw.org
+    service: http://127.0.0.1:18789
+    originRequest:
+      httpHostHeader: bot.bomclaw.org
+  - hostname: claw.bomclaw.org
+    service: http://127.0.0.1:8099
+  - hostname: rumba.bomclaw.org
+    service: http://127.0.0.1:8788
+  - hostname: castle.bomclaw.org
+    service: http://127.0.0.1:8789
+  - service: http_status:404

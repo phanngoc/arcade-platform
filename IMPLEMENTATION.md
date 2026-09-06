@@ -2,7 +2,7 @@
 
 > Tài liệu này **chốt các lựa chọn còn mở** trong [PLATFORM_DESIGN.md](PLATFORM_DESIGN.md) và mô tả đủ chi tiết
 > để bắt đầu code. Phạm vi: **M0 (nền) + M1 (realtime)**. M2+ chỉ ghi chỗ nào cần chừa đường.
-> Ngày: 2026-09-06. **Trạng thái: M0 xong · M1 xong** — §10 (M0) và §11 (M1) ghi những gì
+> Ngày: 2026-09-06. **Trạng thái: M0 xong · M1 xong · 3 game đã chuyển sang platform (§12)** — §10 (M0) và §11 (M1) ghi những gì
 > thực tế khác kế hoạch. Đo được: **462 CCU/vCPU, tick p99 0,99ms** (kill criteria: ≥150 và <8ms).
 
 ---
@@ -687,3 +687,66 @@ room module của người ngoài, không mở Forge công khai, cho tới khi t
 - **Nhiều node**: registry, sticky routing và drain đã viết và có test, nhưng chưa chạy thật
   trên 2 node.
 - `room.save()` mới nhận lệnh, chưa ghi xuống bảng riêng của game (M2).
+
+
+---
+
+## 12. Chuyển 3 game live sang platform
+
+3 game đang chạy công khai (`tank/rumba/castle.bomclaw.org`) đã chuyển sang platform.
+Server riêng của từng game đã tắt; plist giữ lại để rollback.
+
+### 12.1 Bốn thứ phải bổ sung mới chuyển được
+
+**a. Custom domain (migration 005).** URL công khai là `castle.bomclaw.org/`, không phải
+`/g/castle/`. Không có ánh xạ host → game thì phải đổi URL — thứ đã in trong README và
+người chơi đã bookmark. Route wildcard `/` + `/*`; router của Fastify vẫn ưu tiên mọi
+route tĩnh (`/v1/*`, `/health`), có test khẳng định.
+
+**b. `client_dir` trong manifest (006/007).** Game thật không thống nhất: castle/rumba để
+file ngay gốc, tank-battle để trong `public/`. *007 phải sửa 006 vì `jsonb_set('{game,client_dir}')`
+chỉ tạo được key CUỐI — manifest chưa có key `game` nên câu update không ăn mà cũng không báo lỗi.*
+
+**c. SDK thiếu hẳn phần realtime.** M1 làm xong server nhưng SDK chỉ có auth/save/leaderboard.
+Thêm `packages/sdk/src/room.ts`: `rooms.create/join`, `onState/onEvent/onStatus`, reconnect
+backoff có jitter, hàng đợi input khi mất mạng, phát hiện nhảy `seq` → xin snapshot.
+SDK 1,7 → **3,0 KB gzip** (ngân sách 12KB).
+
+**d. URL phải dựng từ REQUEST, không từ cấu hình.** Đây là lỗi làm mất 2 lần thử:
+`/v1/rooms/pick` trả `ws://127.0.0.1:8090/ws` nên trình duyệt ngoài internet nối vào
+localhost của chính nó, và trên trang https còn bị chặn mixed-content. Tương tự, link mời
+trả `http://127.0.0.1:8090/g/tank-battle/?room=XXXX`. Nay cả hai dựng từ `Host` +
+`x-forwarded-proto` của request; link mời còn tra host → game để dùng gốc khi đúng custom
+domain. Gateway nhận `inviteUrl()` tiêm từ `app/` vì việc tra host nằm ở `services` mà
+`roomd` không được import `services`.
+
+### 12.2 Port client tank-battle
+
+`public/client.js` 669 dòng, phần dính giao thức chỉ ~50 dòng (6 loại message + `send`).
+Renderer, âm thanh, nội suy chuyển động: **không đổi một dòng**. Thêm `toLegacy(state)` đổi
+state của platform (object theo id) về hình dạng mảng mà renderer cũ đang dùng —
+rẻ hơn nhiều so với sửa renderer, và giữ được lợi ích băng thông của keyed-by-id.
+
+Mất một tính năng: **thống kê lobby toàn cục** ("N phòng đang hoạt động") — server cũ tự
+broadcast, platform chưa có endpoint tương đương.
+
+### 12.3 Hạ tầng
+
+| | |
+|---|---|
+| Platform | launchd `com.ngocp.arcade`, port 8090, `KeepAlive` + `ThrottleInterval` 10s |
+| Postgres/Redis | Docker, `restart: unless-stopped` |
+| Tunnel | 3 hostname cùng trỏ `127.0.0.1:8090`, phân biệt bằng Host header |
+| JWT_SECRET | đã thay bằng 48 byte ngẫu nhiên (không còn giá trị dev) |
+| Rollback | `ops/rollback.sh` — trả ingress + bật lại 3 server riêng, một lệnh |
+
+### 12.4 Kiểm chứng trên môi trường thật
+
+Qua HTTPS/WSS công khai, bằng browser thật:
+
+| | |
+|---|---|
+| tank.bomclaw.org | tạo phòng `7AYD`, link mời `https://tank.bomclaw.org/?room=7AYD`, status `playing`, tick chạy, 2 xe tăng, 20 địch |
+| castle.bomclaw.org | nộp điểm 3131 → lên bảng, save đồng bộ |
+| rumba.bomclaw.org | engine nạp, bàn 121 ô, nộp điểm 480 → lên bảng |
+| 44 test | vẫn xanh sau mọi thay đổi |

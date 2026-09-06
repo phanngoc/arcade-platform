@@ -6,6 +6,9 @@
  * bộ test đầu tiên không dùng được nó. Ngân sách: ≤12KB gzip.
  */
 
+import { Room, type RoomInfo } from './room.ts'
+export { Room, type RoomInfo } from './room.ts'
+
 export type InitOpts = { gameId: string; baseUrl?: string; storage?: Storage | null }
 export type Me = { playerId: string; isGuest: boolean }
 export type SaveDoc<T = unknown> = { data: T | null; version: number }
@@ -162,6 +165,32 @@ class Client {
         return body.entries
       },
     }
+  }
+
+  /** Realtime. Chỉ dùng được với game khai báo mode authoritative/relay. */
+  rooms = {
+    create: async (mode = 'default', opts?: unknown, name?: string): Promise<Room> => {
+      const r = new Room({ wsUrl: await this.pickNode(), token: this.access!, name }, { kind: 'create', mode, opts })
+      await r.connect()
+      return r
+    },
+    join: async (code: string, name?: string): Promise<Room> => {
+      // Hỏi API node nào đang giữ phòng rồi nối THẲNG tới node đó.
+      const { body } = await this.req<{ wsUrl: string }>('POST', '/v1/rooms/join', { code })
+      const r = new Room({ wsUrl: body.wsUrl, token: this.access!, name }, { kind: 'join', code })
+      await r.connect()
+      return r
+    },
+    /** Mã phòng trong URL (?room=XXXX) — đường vào từ link mời. */
+    codeFromUrl: (): string | null => {
+      if (typeof location === 'undefined') return null
+      return new URLSearchParams(location.search).get('room')
+    },
+  }
+
+  private async pickNode(): Promise<string> {
+    const { body } = await this.req<{ wsUrl: string }>('POST', '/v1/rooms/pick')
+    return body.wsUrl
   }
 
   /** Gộp lô, gửi mỗi 5s. Không await — telemetry không được làm chậm game. */

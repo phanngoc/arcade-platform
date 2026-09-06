@@ -5,11 +5,13 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import { verify, HttpError, unauthorized, closePg, closeRedis } from '@arcade/core'
 import {
   authRoutes, saveRoutes, leaderboardRoutes, bundleRoutes, telemetryRoutes,
-  roomsRoutes, flushAll, submitScore,
+  roomsRoutes, flushAll, submitScore, gameForHost,
 } from '@arcade/services'
 import { RoomManager, attachGateway } from '@arcade/roomd'
 import { loadGameDefs } from './games.ts'
 
+/** Route công khai, so khớp theo route pattern chứ không theo tiền tố URL. */
+const PUBLIC_ROUTES = new Set(['/', '/*'])
 const PUBLIC_PREFIXES = ['/v1/auth/guest', '/v1/auth/refresh', '/health', '/metrics', '/favicon.ico', '/g/']
 
 export type BuildOpts = {
@@ -40,6 +42,9 @@ export async function build(opts: BuildOpts = { gamesDir: './games' }): Promise<
     // Hook này chạy cho cả route không khớp. Không bỏ qua thì mọi URL sai
     // đều trả 401 thay vì 404.
     if (!req.routeOptions?.url) return
+    // Route custom domain (`/` và `/*`) phục vụ file tĩnh của game -> công khai.
+    // So theo route ĐÃ KHỚP, không so theo req.url: mọi URL đều startsWith('/').
+    if (PUBLIC_ROUTES.has(req.routeOptions.url)) return
     if (PUBLIC_PREFIXES.some((p) => req.url.startsWith(p))) return
     const h = req.headers.authorization
     if (!h?.startsWith('Bearer ')) throw unauthorized('TOKEN_MISSING')
@@ -121,7 +126,17 @@ export async function build(opts: BuildOpts = { gamesDir: './games' }): Promise<
           const c = await verify(token, 'access')
           return { playerId: c.sub, gameId: c.gid, isGuest: c.gst }
         },
-        publicBaseUrl,
+        // Link mời: nếu host là custom domain của chính game đó thì dùng gốc
+        // (castle.bomclaw.org/?room=XXXX); nếu không thì dùng đường /g/<id>/.
+        inviteUrl: async (gameId, code, headers) => {
+          const host = typeof headers['host'] === 'string' ? headers['host'] : undefined
+          const xfp = headers['x-forwarded-proto']
+          const proto = (Array.isArray(xfp) ? xfp[0] : xfp)?.split(',')[0]?.trim()
+          if (!host) return `${publicBaseUrl}/g/${gameId}/?room=${code}`
+          const origin = `${proto === 'https' ? 'https' : 'http'}://${host}`
+          const owner = await gameForHost(host)
+          return owner === gameId ? `${origin}/?room=${code}` : `${origin}/g/${gameId}/?room=${code}`
+        },
         log: (m, extra) => app.log.info(extra ?? {}, m),
       })
       app.addHook('onClose', async () => { await gw.close() })
