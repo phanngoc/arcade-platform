@@ -8,12 +8,14 @@
 
 ## 0. Nguyên tắc dẫn đường
 
-1. **Một process, một máy, một Postgres cho tới hết M1.** Không Redis, không Kubernetes, không hàng đợi.
-   Mọi thứ phân tán để dành M2 — và chỉ thêm khi benchmark nói cần.
+1. **Ranh giới kiến trúc có từ ngày 1; topology triển khai chỉ là config.** Stateless service và
+   stateful room server là hai module **không chia sẻ bộ nhớ**, nói chuyện qua interface rõ ràng —
+   ngay cả khi M1 chạy chung một process. Tách thành deployable riêng ở M2 là đổi cấu hình, không phải viết lại.
+   Ngược lại, **không dựng hạ tầng phân tán trước khi có tải**: Kubernetes, hàng đợi, service mesh — chưa.
 2. **SDK phải chạy được bằng `<script src>`.** 3 game hiện có đều không có build step. Nếu SDK bắt buộc
    npm + bundler thì chính 3 game test đầu tiên không dùng được nó. Đây là ràng buộc cứng, không phải sở thích.
 3. **Ưu tiên xoá code hơn thêm code.** Thước đo M1 là *xoá được `server.js` + netcode của tank-battle*.
-4. **Không nhận code người lạ cho tới khi có sandbox thật** (mục 3.4). Đây là cổng an toàn, không đàm phán.
+4. **Không nhận code người lạ cho tới khi có sandbox thật** (§4.4). Đây là cổng an toàn, không đàm phán.
 
 ---
 
@@ -24,23 +26,140 @@
 | Runtime | **Node.js 22 LTS + TypeScript** | Cùng ngôn ngữ client/server; `ws` đã dùng ở tank-battle |
 | HTTP API | **Fastify 5** | Cần routing + schema validation + hook auth; nhẹ hơn Nest, đủ chín |
 | WebSocket | **`ws`** (không dùng lớp bọc) | Cần kiểm soát backpressure và ping/pong thủ công |
-| DB | **Postgres 16** + **`postgres.js`** | Không ORM: RLS và SQL thuần là thiết kế, ORM chỉ che mất nó |
+| Primary DB | **Postgres 16 (JSONB)** + **`postgres.js`** | Nguồn chân lý. Không ORM: RLS và SQL thuần là thiết kế, ORM chỉ che mất nó |
+| In-memory | **Redis 7 (single node)** + `ioredis` | Leaderboard ZSET, room registry, presence, rate limit, sharded pub/sub. **Cluster chỉ khi vượt ngưỡng ở §2.5** |
 | Migration | **file SQL đánh số + runner ~50 dòng** | Đủ dùng; tránh thêm một công cụ nữa để học |
 | JWT | **`jose`** (HS256 ở M0) | Đổi sang EdDSA khi tách gateway khỏi API (M2) |
-| Room isolate | **`node:vm` + watchdog** ở M1 → **`isolated-vm`** ở M2 | Xem mục 3.4 — đây là đánh đổi có rủi ro, đọc kỹ |
+| Room isolate | **`node:vm` + watchdog** ở M1 → **`isolated-vm`** ở M2 | Xem §4.4 — đây là đánh đổi có rủi ro, đọc kỹ |
 | Object storage | **S3-compatible** (MinIO local, Cloudflare R2 prod) | R2 egress $0 — điều kiện sống theo BUSINESS_MODEL §4.2 |
 | Test | **`node:test`** + Playwright | Không thêm Jest/Vitest cho một dự án cỡ này |
 | Local dev | **Docker Compose** (Postgres + MinIO) + `arcade dev` | |
 
-**Không dùng:** Redis (M2), Kubernetes (không bao giờ ở quy mô này), ORM, GraphQL, monorepo tool
-(npm workspaces là đủ).
+**Không dùng:** Kubernetes (không cần ở quy mô này), ORM, GraphQL, service mesh, hàng đợi message,
+monorepo tool (npm workspaces là đủ). **gRPC**: chỉ khi đã tách ≥3 service thật — xem §2.4.
 
 **Hosting:** Hetzner hoặc tương đương có băng thông kèm theo. **Không AWS/GCP cho tầng realtime** —
 egress $0,09/GB giết biên lợi nhuận (BUSINESS_MODEL §4.2).
 
 ---
 
-## 2. Cấu trúc repo
+## 2. Kiến trúc mục tiêu
+
+```
+               ┌────────────────────────────────────────────────────────┐
+               │                     API Gateway                        │
+               └───────────────┬────────────────────────┬───────────────┘
+                               │ REST (gRPC nội bộ)     │ WebSocket (→ WebTransport)
+                               ▼                        ▼
+                   ┌──────────────────────┐  ┌──────────────────────┐
+                   │  Stateless Services  │  │  Stateful Game Room  │
+                   │  Auth · Save · LB    │  │   (Game Loop Server) │
+                   │  Bundle · Telemetry  │  │   tick 30Hz, in-RAM  │
+                   └───────────┬──────────┘  └──────────┬───────────┘
+                               │                        │
+                               ▼                        ▼
+                   ┌──────────────────────┐  ┌──────────────────────┐
+                   │  Postgres 16 (JSONB) │  │   Redis (cache,      │
+                   │  nguồn chân lý       │◄─┤   pub/sub, ZSET LB,  │
+                   │                      │  │   room registry)     │
+                   └──────────────────────┘  └──────────────────────┘
+                          ▲  write-behind từ Redis, reconcile định kỳ
+```
+
+Trục chia quan trọng nhất là **stateless ⟂ stateful**:
+
+| | Stateless Services | Stateful Game Room |
+|---|---|---|
+| Giữ gì trong RAM | không gì (ngoài cache đọc) | **toàn bộ state phòng đang chạy** |
+| Scale bằng | thêm bản sao, đứng sau load balancer bất kỳ | **sticky theo phòng** — client phải tới đúng node giữ phòng đó |
+| Chết thì sao | request retry sang bản sao khác | **mất trận đang chơi** → cần reconnect + snapshot |
+| Deploy | rolling bất kỳ lúc nào | **drain**: khoá phòng mới, đợi phòng hiện tại kết thúc |
+| Giao thức | REST/JSON ra ngoài | WebSocket |
+
+Đây là lý do hai bên không được chia sẻ bộ nhớ, kể cả khi M1 chạy chung một process:
+chúng có mô hình scale và mô hình lỗi khác nhau về bản chất.
+
+### 2.1 Dữ liệu nằm ở đâu — bảng quyết định
+
+Đây là bảng quan trọng nhất của mục này. Sai chỗ nào là trả giá bằng hoá đơn hoặc bằng mất dữ liệu.
+
+| Dữ liệu | Nơi ở | Lý do |
+|---|---|---|
+| Tài khoản, game, manifest, version | **Postgres** | Quan hệ, đọc ít, cần ràng buộc toàn vẹn |
+| Save data người chơi | **Postgres JSONB** (+ cache Redis, TTL 60s) | JSONB cho phép sau này query *bên trong* save (`data->>'level'`) mà không cần migration |
+| **Bảng xếp hạng** | **Redis ZSET là hot path · Postgres là nguồn chân lý** | `ZADD`/`ZREVRANGE`/`ZRANK` là O(log n) — "hạng của tôi" trong 1 triệu người là truy vấn Postgres không làm nổi ở tần suất này. **Write-behind**: ghi Redis ngay, đẩy sang Postgres theo lô 5s. Reconcile lại từ Postgres khi khởi động. |
+| **State phòng đang chạy** | **RAM của chính room process. KHÔNG đưa vào Redis.** | Đây là lỗi kinh điển. 30Hz × N phòng ghi Redis = giết cả Redis lẫn biên lợi nhuận. Redis chỉ giữ *metadata* phòng, không giữ state tick. |
+| Room registry `code → node` | **Redis**, TTL 90s, refresh mỗi 30s | Thứ khiến nhiều node hoạt động được. Node chết → key hết hạn → mã phòng tự giải phóng |
+| Presence / CCU | **Redis**, TTL + heartbeat | |
+| Session token reconnect | **Redis**, TTL = `reconnect_window_sec` | Phải sống được khi client nối lại trúng node khác |
+| Rate limit counter | **Redis** (local ở M1) | |
+| Broadcast liên node | **Redis sharded pub/sub** | Chỉ dùng cho sự kiện *ngoài phòng* (thông báo, lobby). Trong phòng thì không đi qua Redis. |
+| Telemetry | **Postgres** partition theo ngày + rollup | |
+
+**Quy tắc bất di bất dịch:** Redis **không bao giờ** là nguồn chân lý cho điểm số, tiền, hay tiến độ.
+Mất Redis = mất cache và mất phòng đang chạy; **không được** mất dữ liệu người chơi.
+
+### 2.2 Vì sao Redis vào sớm (đổi so với bản trước)
+
+Bản trước của tài liệu này hoãn Redis tới M2. Sửa lại: **Redis vào từ M0**, vì hai việc nó làm
+không có phương án thay thế rẻ hơn:
+
+1. **Leaderboard ZSET.** Không có ZSET thì "hạng của tôi" phải `count(*) where score > x` — Postgres
+   làm được ở 10K row, sập ở 1M row. Đây là tính năng của M0, không phải M2.
+2. **Room registry.** Nếu M1 không có registry, mã phòng chỉ tồn tại trong RAM một process → M2 phải
+   viết lại toàn bộ đường join. Rẻ hơn nhiều nếu registry có sẵn từ đầu, kể cả khi chỉ có một node.
+
+Nhưng **Redis đơn, không Cluster** — xem ngưỡng ở §2.5.
+
+### 2.3 Redis Cluster — những cạm bẫy phải biết trước
+
+Nếu/khi lên Cluster, bốn thứ này sẽ cắn:
+
+1. **Lệnh nhiều key phải cùng hash slot.** `ZUNIONSTORE`, `MGET`, transaction… fail ngang nếu key nằm
+   khác slot. Giải pháp: **hash tag** — đặt tên key là `lb:{game_id}:daily`, `save:{game_id}:<player>`
+   để mọi key của một game rơi vào cùng slot. Phải quyết quy ước đặt tên **từ M0**, đổi sau rất đau.
+2. **Pub/Sub thường trong cluster mode phát ra mọi node** — tốn băng thông nội bộ tuyến tính theo số node.
+   Dùng **sharded pub/sub (`SPUBLISH`/`SSUBSCRIBE`, Redis 7+)** với channel mang hash tag.
+3. **Không có transaction xuyên slot** → mọi thao tác cần nguyên tử phải nằm trong một Lua script và
+   một slot.
+4. **Failover làm mất ghi chưa replicate.** Với write-behind leaderboard, cửa sổ mất là ≤ chu kỳ flush.
+   Chấp nhận được cho điểm số; **không chấp nhận được** nếu sau này có tiền/vật phẩm — thứ đó ghi thẳng Postgres.
+
+### 2.4 Giao thức — chọn gì, khi nào
+
+| Kênh | M0–M1 | Về sau | Ghi chú thật |
+|---|---|---|---|
+| Client → Stateless | **REST/JSON** | REST/JSON | Public API, cần debug bằng curl. Không đổi. |
+| Client → Room | **WebSocket** | + **WebTransport** (M4) | WebSocket đủ cho 2D 30Hz. |
+| Nội bộ service ↔ service | **gọi hàm trực tiếp** | **gRPC** khi đã tách ≥3 service | gRPC giữa hai module của một người là chi phí thuần: thêm proto, thêm codegen, thêm tầng debug — không có lợi ích nào ở quy mô đó. Thêm khi có ranh giới đội ngũ hoặc ranh giới ngôn ngữ. |
+| UDP | **không** | **WebRTC DataChannel** unordered/unreliable, hoặc WebTransport datagram | Trình duyệt **không có UDP thuần**. Chỉ đáng làm khi *đo được* jitter/RTT là nút thắt — với game 2D 30Hz thì không phải. Chi phí: cần TURN server, NAT traversal, và một đường code thứ hai phải bảo trì song song. |
+
+### 2.5 Lộ trình topology — mỗi bước có ngưỡng kích hoạt
+
+| Giai đoạn | Hình thù | Kích hoạt bước sau khi |
+|---|---|---|
+| **T1 (M0–M1)** | 1 process: Fastify + gateway + room host. Postgres + **Redis đơn**. 1 máy. | CPU > 60% kéo dài, **hoặc** cần deploy stateless mà không muốn ngắt trận đang chơi |
+| **T2 (M2)** | Tách 3 deployable: `api` (n bản sao) · `gateway+room` (n node, sticky theo registry) · Postgres + Redis đơn | > 3 room node, **hoặc** Redis > 60% CPU một core, **hoặc** > 25GB dữ liệu nóng |
+| **T3 (M3+)** | Redis **Cluster** (≥3 shard), room node auto-scale, Postgres read replica | Chỉ khi số đo ở T2 chạm ngưỡng. Không lên vì "kiến trúc đẹp hơn". |
+
+**Drain khi deploy room node:** đánh dấu node `draining` → xoá khỏi registry (không nhận phòng mới)
+→ đợi phòng hiện có kết thúc tự nhiên hoặc hết `idle_timeout` → tắt. Không kill phòng đang chơi.
+Viết đường này **ở M1**, kể cả khi chỉ có một node — vì lúc có 3 node thì đã quá muộn để nghĩ.
+
+### 2.6 Đường đi của một lần join phòng (nhiều node)
+
+```
+client ──POST /v1/rooms/join {code}──► API (stateless)
+                                        └─► Redis GET room:{K3F9} ──► "node-2.arcade:8080"
+client ◄──{wsUrl, sessionToken}─────────┘
+client ──WS connect trực tiếp node-2──► Gateway trên node-2 ──► RoomHost trong RAM
+```
+
+Client kết nối **thẳng** tới node giữ phòng. Không cần L7 load balancer biết về phòng, không cần
+consistent hashing ở tầng mạng. Đây là mô hình đơn giản nhất còn hoạt động, và là lý do room registry
+phải có từ M0.
+
+## 3. Cấu trúc repo
 
 ```
 arcade/
@@ -52,12 +171,23 @@ arcade/
 │   ├── sdk/               # @arcade/client — 0 dependency
 │   │   ├── src/index.ts
 │   │   └── dist/arcade.global.js   # BẢN IIFE cho <script src> — bắt buộc
-│   ├── server/
-│   │   ├── src/api/        # Fastify: auth, save, leaderboard, bundle
-│   │   ├── src/gateway/    # ws: handshake, rate limit, routing phòng
-│   │   ├── src/rooms/      # vòng đời phòng, tick loop, sandbox
-│   │   ├── src/db/         # postgres.js + query
-│   │   └── src/config.ts
+│   ├── core/              # hạ tầng dùng chung — KHÔNG chứa logic nghiệp vụ
+│   │   ├── src/pg.ts          # postgres.js, RLS context, transaction
+│   │   ├── src/redis.ts       # ioredis + quy ước hash tag {game_id}
+│   │   └── src/registry.ts    # room registry: claim/renew/resolve/release
+│   ├── services/          # STATELESS — mỗi thư mục là 1 deployable tương lai
+│   │   ├── src/auth/
+│   │   ├── src/save/
+│   │   ├── src/leaderboard/   # ZSET hot path + write-behind sang Postgres
+│   │   ├── src/bundle/
+│   │   └── src/telemetry/
+│   ├── roomd/             # STATEFUL — game loop server
+│   │   ├── src/gateway.ts     # ws handshake, rate limit, routing
+│   │   ├── src/host.ts        # RoomHost: state, tick, diff
+│   │   ├── src/scheduler.ts   # 1 timer 10ms cho mọi phòng
+│   │   ├── src/sandbox.ts     # node:vm + watchdog
+│   │   └── src/drain.ts       # rút khỏi registry, đợi phòng kết thúc
+│   ├── app/               # composition root: M1 gộp services+roomd 1 process
 │   ├── cli/               # arcade dev|deploy|test|typegen|bench
 │   └── bench/             # sinh tải headless — công cụ cho kill criteria M1
 ├── templates/
@@ -70,9 +200,14 @@ arcade/
 
 npm workspaces. `protocol` không phụ thuộc gì; `sdk` chỉ phụ thuộc `protocol`.
 
+**Luật phụ thuộc (ép bằng lint, không phải bằng lời hứa):**
+`services/` và `roomd/` **không được import lẫn nhau**. Cả hai chỉ nói chuyện qua `core/` hoặc
+qua HTTP/registry. `app/` là nơi duy nhất được import cả hai — và đó chính là thứ bị xoá ở M2
+khi tách deployable. Nếu một import xuyên biên giới lọt qua, việc tách ở M2 biến thành viết lại.
+
 ---
 
-## 3. Thiết kế từng module
+## 4. Thiết kế từng module
 
 ### 3.1 `protocol` — state diff/patch
 
@@ -232,7 +367,7 @@ arcade deploy     # M2
 
 ---
 
-## 4. Migration đầu tiên
+## 5. Migration đầu tiên
 
 `migrations/001_init.sql` — lấy từ PLATFORM_DESIGN §7, thêm phần thực thi:
 
@@ -310,20 +445,22 @@ dữ liệu thật đau hơn nhiều lần so với bật ngay.
 
 ---
 
-## 5. Trình tự làm — có thứ tự phụ thuộc
+## 6. Trình tự làm — có thứ tự phụ thuộc
 
 **M0 — nền (mục tiêu: castle + rumba bỏ được `server.js`)**
 
 | # | Việc | Phụ thuộc | Xong khi |
 |---|---|---|---|
-| 1 | docker-compose + migration runner + `001_init.sql` | — | `arcade dev` dựng được DB sạch |
+| 1 | docker-compose (Postgres + **Redis** + MinIO) + migration runner + `001_init.sql` | — | `arcade dev` dựng được DB sạch |
 | 2 | Fastify + auth guest + JWT hook + RLS context | 1 | test: guest A không đọc được save của B |
 | 3 | `/v1/save` có optimistic locking | 2 | test: 2 tab ghi đồng thời → 1 cái nhận 409 |
-| 4 | `/v1/leaderboard` + index | 2 | top-20 trên 1 triệu row < 10ms |
+| 4a | `core/redis.ts` + quy ước hash tag `{game_id}` | 1 | test: mọi key của 1 game cùng slot |
+| 4b | Leaderboard **ZSET hot path + write-behind Postgres** | 2,4a | top-20 và **hạng của tôi** trên 1 triệu entry < 10ms; kill Redis → khởi động lại reconcile đúng từ Postgres |
 | 5 | Bundle server `/g/:gameId/*` | 2 | mở được castle qua platform |
 | 6 | SDK: auth + save + leaderboard, bản IIFE | 2–4 | ≤12KB gzip, chạy bằng `<script src>` |
 | 7 | **Port castle + rumba** | 5,6 | **xoá `server.js`; có save + bảng xếp hạng thật** |
 | 8 | `arcade dev` + `arcade test` (G1–G3) | 1–6 | chạy được ở máy sạch |
+| 8b | Lint luật phụ thuộc `services/` ⊥ `roomd/` | 2 | CI fail khi có import xuyên biên giới |
 
 **M1 — realtime (mục tiêu: tank-battle bỏ được toàn bộ netcode)**
 
@@ -334,6 +471,8 @@ dữ liệu thật đau hơn nhiều lần so với bật ngay.
 | 11 | RoomHost + scheduler 10ms + tick loop | 9,10 | 1 phòng chạy `onTick` đúng nhịp |
 | 12 | Room module loader (`node:vm` + watchdog) | 11 | module vô hạn vòng lặp bị giết, host sống |
 | 13 | Mã phòng + invite link + join/create | 11 | 2 tab vào chung phòng |
+| 13b | **Room registry trên Redis** (claim/renew/resolve/release) + `POST /v1/rooms/join` trả `wsUrl` | 4a,13 | join đi đúng đường §2.6 dù chỉ có 1 node |
+| 13c | **Drain**: rút khỏi registry, đợi phòng kết thúc, tắt sạch | 13b | deploy lại không giết trận đang chơi |
 | 14 | Reconnect: session token + cửa sổ + snapshot | 13 | ngắt mạng 10s, vào lại đúng state |
 | 15 | `view()` + interest management | 11 | game giấu bài không lộ state |
 | 16 | Thu hồi phòng + `onDispose` flush | 11,3,4 | điểm cuối trận vào bảng xếp hạng |
@@ -347,7 +486,7 @@ Làm 9 trước tất cả; làm 17 ngay khi gateway chạy được, đừng đ
 
 ---
 
-## 6. Chiến lược test
+## 7. Chiến lược test
 
 | Tầng | Công cụ | Bắt lỗi gì |
 |---|---|---|
@@ -362,21 +501,23 @@ mock sẽ cho cảm giác an toàn giả.
 
 ---
 
-## 7. Quan sát vận hành (tối thiểu, làm ngay ở M1)
+## 8. Quan sát vận hành (tối thiểu, làm ngay ở M1)
 
 Log JSON một dòng mỗi sự kiện; số đo phơi ra `/metrics` dạng Prometheus text:
 `arcade_rooms_open`, `arcade_players_connected`, `arcade_tick_ms{quantile}`,
-`arcade_patch_bytes_total`, `arcade_room_disposed_total{reason}`.
+`arcade_patch_bytes_total`, `arcade_room_disposed_total{reason}`, `arcade_lb_writebehind_lag_seconds`,
+`arcade_registry_claims_total`, `redis_commands_total`.
 
 Ba con số phải nhìn thấy hằng ngày từ ngày đầu: **CCU**, **p99 tick**, **byte/CCU/phút**.
 Con số thứ ba là thứ dự báo hoá đơn egress — thứ giết biên lợi nhuận nhanh nhất.
 
 ---
 
-## 8. Những gì cố tình chưa làm ở M0/M1
+## 9. Những gì cố tình chưa làm ở M0/M1
 
-Ghi ra để khỏi tranh luận lại: Redis, nhiều node + sticky routing, prediction/reconciliation,
-binary state, WebTransport, matchmaking theo MMR (chỉ có `join theo mã` + `quickMatch` ngẫu nhiên),
-storage/UGC, dashboard web (dùng `arcade` CLI + `/metrics`), billing, moderation.
+Ghi ra để khỏi tranh luận lại: **Redis Cluster** (dùng Redis đơn — ngưỡng lên Cluster ở §2.5),
+tách deployable (ranh giới có sẵn, nhưng M1 vẫn 1 process), gRPC nội bộ, UDP/WebRTC/WebTransport,
+prediction/reconciliation, binary state, matchmaking theo MMR (chỉ có `join theo mã` + `quickMatch`
+ngẫu nhiên), storage/UGC, dashboard web (dùng `arcade` CLI + `/metrics`), billing, moderation.
 
 Mỗi thứ trên chỉ được mở khi có **số đo** hoặc **khách hàng** đòi — không mở vì "kiến trúc đẹp hơn".
