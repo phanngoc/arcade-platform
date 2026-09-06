@@ -11,10 +11,11 @@
   "scripts": {
     "dev": "node packages/cli/src/index.ts dev",
     "migrate": "node scripts/migrate.ts",
-    "test": "node --env-file=.env --test packages/core/test/redis-keys.test.ts packages/services/test/api.test.ts",
+    "test": "node --env-file=.env --test packages/protocol/test/patch.test.ts packages/protocol/test/roomcode.test.ts packages/core/test/redis-keys.test.ts packages/services/test/api.test.ts packages/roomd/test/realtime.test.ts",
     "lint:deps": "node scripts/lint-deps.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build:sdk": "node packages/sdk/build.ts"
+    "build:sdk": "node packages/sdk/build.ts",
+    "bench": "node --env-file=.env packages/bench/src/index.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
@@ -22,9 +23,11 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
+    "@types/ws": "^8.18.1",
     "fastify": "^5.2.0",
     "ioredis": "^5.4.2",
     "jose": "^5.9.6",
-    "postgres": "^3.4.5"
+    "postgres": "^3.4.5",
+    "ws": "^8.21.3"
   }
 }

@@ -2,8 +2,8 @@
 
 > Tài liệu này **chốt các lựa chọn còn mở** trong [PLATFORM_DESIGN.md](PLATFORM_DESIGN.md) và mô tả đủ chi tiết
 > để bắt đầu code. Phạm vi: **M0 (nền) + M1 (realtime)**. M2+ chỉ ghi chỗ nào cần chừa đường.
-> Ngày: 2026-09-06. **Trạng thái: M0 xong** (10/10 việc) — xem §10 để biết những gì
-> thực tế khác với kế hoạch. M1 chưa bắt đầu.
+> Ngày: 2026-09-06. **Trạng thái: M0 xong · M1 xong** — §10 (M0) và §11 (M1) ghi những gì
+> thực tế khác kế hoạch. Đo được: **462 CCU/vCPU, tick p99 0,99ms** (kill criteria: ≥150 và <8ms).
 
 ---
 
@@ -592,3 +592,98 @@ Sửa bằng `if (!req.routeOptions?.url) return` ở đầu hook.
 - **Refresh token là JWT stateless** → chưa thu hồi được trước hạn. Khi cần: lưu `jti`
   vào Redis và kiểm trong `/v1/auth/refresh`.
 - **`/v1/auth/link` chưa gửi OTP thật** — mới gắn email và giữ nguyên `player_id`.
+
+
+---
+
+## 11. Nhật ký M1 — realtime
+
+12/12 việc. **44/44 test pass**, gồm 10.000 cặp state cho diff/patch và 12 test G4 với
+client WebSocket thật.
+
+### 11.1 Kết quả đo (việc 20 — kill criteria)
+
+`arcade bench --game tank-battle --rooms 25 --players 4 --seconds 20`, server chạy ở
+**tiến trình riêng** nên CPU của nó tách khỏi bộ sinh tải:
+
+| Chỉ số | Đo được | Ngưỡng | |
+|---|---|---|---|
+| CCU | 100 | — | |
+| CPU server | 0,22 vCPU | — | |
+| **CCU/vCPU** | **462** | ≥ 150 | ✓ vượt 3× |
+| **tick p99** | **0,99 ms** | < 8 ms | ✓ |
+| tick p50 | 0,31 ms | — | |
+| Băng thông | **316 KB/CCU/phút** (5,3 KB/s) | — | |
+| RSS | 158 MB | — | |
+
+**Băng thông 5,3 KB/s xác nhận giả định 5 KB/s ở BUSINESS_MODEL §4.2** — giờ là số đo,
+không còn là ước tính. Kết luận về egress giữ nguyên: 100 CCU trung bình ≈ 1,3 TB/tháng,
+tức ~$117/tháng chỉ riêng egress trên AWS và ≈ $0 trên Hetzner/Cloudflare.
+
+Vì sao con số tốt hơn kỳ vọng: diff **một lần** cho cả phòng rồi serialize **một lần**
+(chỉ tách riêng khi game có `view()`), làm tròn số thực 3 chữ số, và một `setInterval`
+10ms duy nhất thay cho một timer mỗi phòng.
+
+### 11.2 tank-battle sau khi port
+
+| | Trước | Sau |
+|---|---|---|
+| `server.js` | 193 dòng: HTTP tĩnh, WebSocket, sổ phòng, sinh mã, thu hồi phòng trống, vòng lặp, broadcast | **không dùng nữa** ở đường platform |
+| `game.js` | 645 dòng gameplay | **không đổi một dòng** |
+| `server/room.part.js` | — | ~130 dòng, thuần ánh xạ engine ↔ hook |
+
+Abstraction đạt bài test: **toàn bộ netcode viết tay biến mất, gameplay giữ nguyên.**
+
+Một tối ưu bắt buộc khi port: `tanks`/`bullets` chuyển từ **mảng sang object theo id**.
+Platform diff mảng theo chỉ số (không LCS — quá đắt ở 30Hz), nên xoá một viên đạn ở giữa
+mảng làm mọi phần tử sau dịch chỗ và patch to bằng cả mảng. Object keyed-by-id thì xoá =
+một op. `events`/`mapDelta`/`effects` chuyển sang `room.broadcast()` vì chúng chỉ sống
+một tick — nằm trong state thì mỗi tick sinh 2 op cho thứ không phải state.
+
+### 11.3 Bốn lỗi chỉ lộ ra khi chạy thật
+
+**a. Gateway xử lý message SONG SONG — client thật bị từ chối oan.**
+Handler `ws.on('message')` là `async`, nên client gửi liền `hello` rồi `create` sẽ bị xử lý
+ngược thứ tự: `create` chạy khi `hello` chưa verify xong → `TOKEN_INVALID` → đóng kết nối.
+Mọi client thật đều gửi kiểu đó. Sửa: mỗi kết nối giữ một promise chain, message xử lý
+tuần tự. *Đây là lỗi mà chỉ test tích hợp bắt được — unit test từng handler sẽ pass hết.*
+
+**b. Input của client làm sập cả phòng.**
+Bench gửi `dir` âm (`Date.now()/500|0` tràn int32), engine dùng `DIR[tank.dir]` → undefined
+→ ném lỗi → platform thu hồi phòng → **cả 4 người trong trận bị văng vì một client hỏng**.
+Platform xử lý đúng (cô lập lỗi, không sập host), nhưng bài học thuộc về room module:
+**input của client là dữ liệu không tin được và phải kiểm tra trước khi chạm vào engine.**
+Đã thêm kiểm tra `dir ∈ {0,1,2,3}` trong room module tank-battle.
+
+**c. Lỗi ném từ trong vm không phải `instanceof Error` của host.**
+Khác realm → `cause instanceof Error` luôn false → mất sạch stack đúng lúc cần nhất, chỉ
+còn message. Phải duck-type (`typeof cause.stack === 'string'`). Trước khi sửa, lỗi (b)
+chỉ hiện ra là "undefined is not iterable" không kèm vị trí.
+
+**d. Công cụ đo báo ĐẠT trên một lần chạy hỏng.**
+Lần bench đầu tiên in "✓ ĐẠT · CCU/vCPU 1075" trong khi 12/12 client lỗi và server không
+xử lý tick nào. Một công cụ đo báo đạt sai còn tệ hơn không đo. Nay bench tự vô hiệu hoá
+lần chạy nếu có client lỗi, không có byte nào về, hoặc server không báo tick.
+
+### 11.4 Quyết định thiết kế đáng ghi
+
+**Không đưa hàm nào của host vào vm.** Room module không gọi `room.broadcast()` của host —
+nó đẩy lệnh vào `room._out` (mảng thuần), host đọc và thực thi sau khi hook trả về. Vừa bớt
+một đường thoát sandbox, vừa khiến mọi tác động ra ngoài của module tuần tự và quan sát được.
+`_out` bắt đầu bằng `_` nên diff bỏ qua — không tốn băng thông.
+
+**Watchdog dựa vào `timeout` của `vm.Script.runInContext`**, thứ khiến V8 *kết thúc* script
+đang chạy. Nhờ vậy `onTick` lặp vô hạn bị giết thay vì treo cả process — đã có test.
+
+**`node:vm` vẫn KHÔNG phải ranh giới bảo mật.** Cổng chặn của M2 giữ nguyên: không nhận
+room module của người ngoài, không mở Forge công khai, cho tới khi thay bằng `isolated-vm`.
+
+### 11.5 Chưa làm
+
+- **`server.js` của tank-battle vẫn còn**, cùng lý do như castle/rumba ở §10.6: 3 site đang
+  live qua launchd + Cloudflare tunnel, và chuyển traffic thật sang server hạng dev là quyết
+  định vận hành riêng.
+- **Prediction/reconciliation**: chưa. Với 2D 30Hz và RTT nội địa thì chưa đo được là nút thắt.
+- **Nhiều node**: registry, sticky routing và drain đã viết và có test, nhưng chưa chạy thật
+  trên 2 node.
+- `room.save()` mới nhận lệnh, chưa ghi xuống bảng riêng của game (M2).

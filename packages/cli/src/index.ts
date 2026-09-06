@@ -47,13 +47,24 @@ switch (cmd) {
     run('npx', ['tsc', '-p', 'tsconfig.json', '--noEmit'])
     console.log('▸ G1 tĩnh: ngân sách kích thước SDK')
     run('node', ['packages/sdk/build.ts'])
-    console.log('▸ G2/G3: test tích hợp trên Postgres + Redis thật')
+    console.log('▸ G2/G3/G4: test tích hợp trên Postgres + Redis thật')
     // Đường dẫn file tường minh: truyền thư mục thì node:test treo chờ event loop.
-    run('node', ['--env-file=.env', '--test', ...rest.length ? rest
-      : ['packages/core/test/redis-keys.test.ts', 'packages/services/test/api.test.ts']])
+    run('node', ['--env-file=.env', '--test', ...rest.length ? rest : [
+      'packages/protocol/test/patch.test.ts',
+      'packages/protocol/test/roomcode.test.ts',
+      'packages/core/test/redis-keys.test.ts',
+      'packages/services/test/api.test.ts',
+      'packages/roomd/test/realtime.test.ts',
+    ]])
     console.log('\n✓ tất cả cổng đã qua')
     break
   }
+
+  case 'bench':
+    // Công cụ duy nhất trả lời được kill criteria M1. Chạy server ở tiến trình
+    // riêng để CPU của nó tách khỏi bộ sinh tải.
+    run('node', ['--env-file=.env', 'packages/bench/src/index.ts', ...rest])
+    break
 
   case 'down':
     run('docker', ['compose', 'down'])
@@ -70,9 +81,10 @@ switch (cmd) {
 
   arcade dev      dựng Postgres+Redis, migrate, build SDK, chạy server (watch)
   arcade migrate  chỉ chạy migration
-  arcade test     G1 (lint deps, typecheck, ngân sách SDK) + G2/G3 (tích hợp)
+  arcade test     G1 (lint deps, typecheck, ngân sách SDK) + G2/G3/G4 (tích hợp)
+  arcade bench    sinh tải, in CCU/vCPU + p99 tick + băng thông (kill criteria M1)
   arcade health   kiểm tra server có sống không
   arcade down     tắt Postgres + Redis
 
-  bench/deploy/typegen: M1+`)
+  deploy/typegen: M2+`)
 }

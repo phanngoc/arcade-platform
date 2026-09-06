@@ -4,12 +4,23 @@
 import Fastify, { type FastifyInstance } from 'fastify'
 import { verify, HttpError, unauthorized, closePg, closeRedis } from '@arcade/core'
 import {
-  authRoutes, saveRoutes, leaderboardRoutes, bundleRoutes, telemetryRoutes, flushAll,
+  authRoutes, saveRoutes, leaderboardRoutes, bundleRoutes, telemetryRoutes,
+  roomsRoutes, flushAll, submitScore,
 } from '@arcade/services'
+import { RoomManager, attachGateway } from '@arcade/roomd'
+import { loadGameDefs } from './games.ts'
 
 const PUBLIC_PREFIXES = ['/v1/auth/guest', '/v1/auth/refresh', '/health', '/metrics', '/favicon.ico', '/g/']
 
-export async function build(opts: { gamesDir: string } = { gamesDir: './games' }): Promise<FastifyInstance> {
+export type BuildOpts = {
+  gamesDir: string
+  /** false để test chỉ tầng stateless (không dựng gateway/scheduler) */
+  realtime?: boolean
+  publicBaseUrl?: string
+  nodeUrl?: string
+}
+
+export async function build(opts: BuildOpts = { gamesDir: './games' }): Promise<FastifyInstance> {
   const app = Fastify({
     logger: { level: process.env.LOG_LEVEL ?? 'info' },
     bodyLimit: 256 * 1024,
@@ -57,13 +68,68 @@ export async function build(opts: { gamesDir: string } = { gamesDir: './games' }
   // vừa gây nhiễu log, vừa để lộ ít thông tin hơn mức cần thiết.
   app.setNotFoundHandler(async (_req, reply) => reply.code(404).send({ error: 'NOT_FOUND' }))
 
+  const publicBaseUrl = opts.publicBaseUrl ?? `http://${process.env.HOST ?? '127.0.0.1'}:${process.env.PORT ?? 8090}`
+  const nodeUrl = opts.nodeUrl ?? publicBaseUrl.replace(/^http/, 'ws')
+
   await app.register(authRoutes)
   await app.register(saveRoutes)
   await app.register(leaderboardRoutes)
   await app.register(telemetryRoutes)
-  await app.register(bundleRoutes, opts)
+  await app.register(roomsRoutes, { wsBaseUrl: nodeUrl })
+  await app.register(bundleRoutes, { gamesDir: opts.gamesDir })
+
+  // ── tầng stateful ────────────────────────────────────────────────────────
+  // Đây là chỗ DUY NHẤT services/ và roomd/ gặp nhau, và là thứ bị xoá ở M2 khi
+  // tách deployable. fx được tiêm từ đây nên roomd không import services —
+  // scripts/lint-deps.ts chặn nếu ai đó phá luật này.
+  let manager: RoomManager | null = null
+  if (opts.realtime !== false) {
+    manager = new RoomManager({
+      nodeUrl,
+      fx: {
+        submitScore: (gameId, board, playerId, score) => {
+          // Điểm do room server nộp -> verified = true. Đây là khác biệt duy
+          // nhất giữa bảng xếp hạng có và không có chống cheat.
+          void submitScore(gameId, board, playerId, score, { verified: true })
+            .catch((e: unknown) => app.log.warn({ err: e }, 'room nộp điểm lỗi'))
+        },
+        persist: () => { /* room.save() -> M2: ghi vào bảng riêng của game */ },
+        log: (msg) => app.log.info({ src: 'roomd' }, msg),
+      },
+    })
+    for (const def of await loadGameDefs(opts.gamesDir)) manager.registerGame(def)
+    manager.start()
+
+    const mgr = manager
+    app.get('/metrics', async () => {
+      const s = mgr.stats()
+      return [
+        `arcade_rooms_open ${s.rooms}`,
+        `arcade_players_connected ${s.live}`,
+        `arcade_players_total ${s.players}`,
+        `arcade_tick_ms{quantile="0.5"} ${s.tickP50.toFixed(3)}`,
+        `arcade_tick_ms{quantile="0.99"} ${s.tickP99.toFixed(3)}`,
+        `arcade_patch_bytes_total ${s.patchBytes}`,
+        `arcade_draining ${s.draining ? 1 : 0}`,
+      ].join('\n') + '\n'
+    })
+
+    app.addHook('onReady', async () => {
+      const gw = attachGateway(app.server, {
+        manager: mgr,
+        verifyToken: async (token) => {
+          const c = await verify(token, 'access')
+          return { playerId: c.sub, gameId: c.gid, isGuest: c.gst }
+        },
+        publicBaseUrl,
+        log: (m, extra) => app.log.info(extra ?? {}, m),
+      })
+      app.addHook('onClose', async () => { await gw.close() })
+    })
+  }
 
   app.addHook('onClose', async () => {
+    if (manager) await manager.stop()
     await flushAll().catch(() => {})
     await Promise.all([closePg(), closeRedis()])
   })
