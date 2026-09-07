@@ -11,9 +11,11 @@ node_modules/
 #   tank-battle -> github.com/phanngoc/tank-battle-90
 #   castle      -> repo riêng
 #   rumba       -> repo riêng
+#   blockdrop   -> repo riêng (chưa đẩy lên remote)
 /tank-battle/
 /castle/
 /rumba/
+/blockdrop/
 
 # implement
 node_modules/
