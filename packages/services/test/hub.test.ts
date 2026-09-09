@@ -12,6 +12,16 @@ let app: Awaited<ReturnType<typeof build>>
 let dir: string
 const created: string[] = []
 
+/** Forge chèn row ở tác vụ nền: phải đợi job xong, nếu không after() xoá
+ *  trước khi insert kịp chạy và row test rơi lại trong DB thật. */
+async function waitJob(jobId: string, h: Record<string, string>): Promise<void> {
+  for (let i = 0; i < 40; i++) {
+    const j = await app.inject({ method: 'GET', url: `/v1/forge/jobs/${jobId}`, headers: h })
+    if ((j.json() as { status: string }).status !== 'building') return
+    await new Promise((res) => setTimeout(res, 50))
+  }
+}
+
 async function hubToken() {
   const r = await app.inject({ method: 'POST', url: '/v1/auth/guest', payload: { gameId: HUB_GAME_ID } })
   return { authorization: `Bearer ${(r.json() as { accessToken: string }).accessToken}` }
@@ -112,6 +122,7 @@ test('cooldown chặn tạo dồn dập', async () => {
   const a = await app.inject({ method: 'POST', url: '/v1/forge/games', headers: h, payload: { title: 'Lien Tiep Mot' } })
   assert.equal(a.statusCode, 202)
   created.push((a.json() as { gameId: string }).gameId)
+  await waitJob((a.json() as { jobId: string }).jobId, h)
   const b = await app.inject({ method: 'POST', url: '/v1/forge/games', headers: h, payload: { title: 'Lien Tiep Hai' } })
   assert.equal(b.statusCode, 409)
   assert.equal((b.json() as { error: string }).error, 'FORGE_COOLDOWN')
@@ -121,6 +132,7 @@ test('job của người khác trả 404', async () => {
   const h = await hubToken()
   const r = await app.inject({ method: 'POST', url: '/v1/forge/games', headers: h, payload: { title: 'Rieng Tu' } })
   created.push((r.json() as { gameId: string }).gameId)
+  await waitJob((r.json() as { jobId: string }).jobId, h)
   const other = await hubToken()
   const j = await app.inject({ method: 'GET', url: `/v1/forge/jobs/${(r.json() as { jobId: string }).jobId}`, headers: other })
   assert.equal(j.statusCode, 404)

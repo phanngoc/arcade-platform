@@ -6,7 +6,7 @@
 //  - phải có access token (guest cũng được) và token phải thuộc chính game "hub"
 //  - hạn mức: MAX_PER_PLAYER game/người và COOLDOWN_MS giữa 2 lần tạo
 import type { FastifyInstance } from 'fastify'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { sql, badRequest, forbidden, notFound, conflict } from '@arcade/core'
 import { TEMPLATES, normalize, render } from './template.ts'
@@ -42,8 +42,15 @@ export async function hubRoutes(app: FastifyInstance, opts: { gamesDir: string }
     const rows = await sql<{ id: string; name: string; domains: string[] | null; created_from: string; manifest: Record<string, unknown>; created_at: Date }[]>`
       select id, name, domains, created_from, manifest, created_at
       from games where id <> ${HUB_GAME_ID} order by created_at asc, id asc`
+    // Row DB không đủ: game chỉ vào danh mục khi bundle thật sự phục vụ được.
+    // Nếu không, người chơi bấm vào và nhận 404.
+    const playable = await Promise.all(rows.map(async (r) => {
+      const m = (r.manifest ?? {}) as { game?: { client_dir?: string } }
+      const dir = join(root, r.id, m.game?.client_dir || '.')
+      try { return (await stat(join(dir, 'index.html'))).isFile() } catch { return false }
+    }))
     return {
-      games: rows.map((r) => {
+      games: rows.filter((_, i) => playable[i]!).map((r) => {
         const m = (r.manifest ?? {}) as { game?: { tagline?: string }; runtime?: { mode?: string } }
         const domain = (r.domains ?? [])[0]
         return {
