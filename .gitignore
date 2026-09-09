@@ -17,8 +17,24 @@ node_modules/
 /rumba/
 /blockdrop/
 
+# Batch arcade-2026-09-07: symlink tới repo riêng ở ../arcade-2026-09-07/,
+# platform phục vụ qua /g/<id>/. Không nhúng vào repo này (embedded-repo).
+/neon-lane-runner/
+/ruins-dash/
+/tiny-road-hopper/
+/rocket-workshop/
+/slice-orchard/
+/pulse-cube/
+/prism-tower/
+/spiral-drop/
+/maze-spark/
+/cloudbound-hop/
+
 # implement
 node_modules/
 .env
 dist/
 packages/sdk/dist/
+
+# Game do người chơi tạo qua Forge (không phải mã nguồn của platform)
+/u-*/

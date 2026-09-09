@@ -5,14 +5,16 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import { verify, HttpError, unauthorized, closePg, closeRedis } from '@arcade/core'
 import {
   authRoutes, saveRoutes, leaderboardRoutes, bundleRoutes, telemetryRoutes,
-  roomsRoutes, flushAll, submitScore, gameForHost,
+  roomsRoutes, hubRoutes, flushAll, submitScore, gameForHost,
 } from '@arcade/services'
 import { RoomManager, attachGateway } from '@arcade/roomd'
 import { loadGameDefs } from './games.ts'
 
 /** Route công khai, so khớp theo route pattern chứ không theo tiền tố URL. */
 const PUBLIC_ROUTES = new Set(['/', '/*'])
-const PUBLIC_PREFIXES = ['/v1/auth/guest', '/v1/auth/refresh', '/health', '/metrics', '/favicon.ico', '/g/']
+const PUBLIC_PREFIXES = ['/v1/auth/guest', '/v1/auth/refresh', '/health', '/metrics', '/favicon.ico', '/g/',
+  // Danh mục hub + danh sách template là dữ liệu công khai; tạo game thì không.
+  '/v1/games', '/v1/forge/templates']
 
 export type BuildOpts = {
   gamesDir: string
@@ -81,6 +83,8 @@ export async function build(opts: BuildOpts = { gamesDir: './games' }): Promise<
   await app.register(leaderboardRoutes)
   await app.register(telemetryRoutes)
   await app.register(roomsRoutes, { wsBaseUrl: nodeUrl })
+  await app.register(hubRoutes, { gamesDir: opts.gamesDir })
+  // bundleRoutes cuối cùng: nó giữ wildcard '/*' cho custom domain.
   await app.register(bundleRoutes, { gamesDir: opts.gamesDir })
 
   // ── tầng stateful ────────────────────────────────────────────────────────
