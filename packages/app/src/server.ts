@@ -110,7 +110,12 @@ export async function build(opts: BuildOpts = { gamesDir: './games' }): Promise<
     manager.start()
 
     const mgr = manager
-    app.get('/metrics', async () => {
+    app.get('/metrics', async (req, reply) => {
+      // Số liệu vận hành: chỉ cho truy cập từ máy chủ. Request đi qua tunnel
+      // luôn mang cf-connecting-ip/x-forwarded-for -> trả 404 y như không có route.
+      if (req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for']) {
+        return reply.code(404).send({ error: 'NOT_FOUND' })
+      }
       const s = mgr.stats()
       return [
         `arcade_rooms_open ${s.rooms}`,
