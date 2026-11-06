@@ -14,6 +14,10 @@ for L in com.ngocp.tankbattle com.ngocp.rumba com.ngocp.castle; do
 done
 
 echo "▸ tắt platform"
+# Since 2026-11-06 the platform runs under pm2 (~/.goterm-shared/pm2/arcade.config.cjs);
+# the launchd line stays for a machine that still has the old job.
+PM2=$(command -v pm2 || ls -d "$HOME"/.nvm/versions/node/*/bin/pm2 2>/dev/null | tail -1)
+[ -n "$PM2" ] && "$PM2" stop arcade 2>/dev/null && "$PM2" save >/dev/null 2>&1 || true
 launchctl bootout "gui/$U/com.ngocp.arcade" 2>/dev/null || true
 
 echo "▸ nạp lại cloudflared"
