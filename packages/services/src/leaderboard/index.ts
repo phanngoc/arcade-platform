@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { sql, badRequest, forbidden } from '@arcade/core'
 import { submit, top, around, flushAll } from './store.ts'
+import { assertStandardMatch, CASTLE_GAME_ID } from '../castle/index.ts'
 
 export { flushAll, flushDirty } from './store.ts'
 
@@ -36,7 +37,7 @@ export async function leaderboardRoutes(app: FastifyInstance): Promise<void> {
   app.post('/v1/leaderboard/:board', async (req) => {
     const { gameId, playerId } = req.actor
     const { board } = req.params as { board: string }
-    const body = (req.body ?? {}) as { score?: number; name?: string }
+    const body = (req.body ?? {}) as { score?: number; name?: string; matchId?: unknown }
 
     if (typeof body.score !== 'number' || !Number.isFinite(body.score)) throw badRequest('SCORE_REQUIRED')
 
@@ -46,6 +47,10 @@ export async function leaderboardRoutes(app: FastifyInstance): Promise<void> {
 
     // Ở mode authoritative, chỉ room server được nộp điểm. Client nộp bị từ chối
     // thẳng — chứ không nhận rồi âm thầm đánh dấu unverified.
+    // Castle 'standard' (Đấu Chuẩn, mọi quân ép cấp 5): chỉ nhận điểm gắn với một
+    // trận mode=standard đã ghi ở server — điểm chiến dịch (có cấp quân trả tiền) bị loại.
+    if (gameId === CASTLE_GAME_ID && board === 'standard') await assertStandardMatch(playerId, body.matchId)
+
     if (m.runtime?.mode === 'authoritative') {
       throw forbidden('CLIENT_SUBMIT_FORBIDDEN', 'mode authoritative: chỉ room server được nộp điểm')
     }

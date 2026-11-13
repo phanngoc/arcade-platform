@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "node packages/cli/src/index.ts dev",
     "migrate": "node scripts/migrate.ts",
-    "test": "node --env-file=.env --test packages/protocol/test/patch.test.ts packages/protocol/test/roomcode.test.ts packages/core/test/redis-keys.test.ts packages/services/test/api.test.ts packages/services/test/hub.test.ts packages/roomd/test/realtime.test.ts",
+    "test": "node --env-file=.env --test packages/protocol/test/patch.test.ts packages/protocol/test/roomcode.test.ts packages/core/test/redis-keys.test.ts packages/services/test/api.test.ts packages/services/test/hub.test.ts packages/services/test/castle.test.ts packages/roomd/test/realtime.test.ts",
     "lint:deps": "node scripts/lint-deps.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build:sdk": "node packages/sdk/build.ts",
