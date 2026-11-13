@@ -1,9 +1,9 @@
-// Cửa hàng + đơn VietQR + webhook kiểu PayOS. Server là nguồn sự thật cho entitlement.
+// Cửa hàng + đơn QR SePay (VietQR) + webhook SePay. Server là nguồn sự thật cho entitlement.
 //   - giới hạn mua (ngày/tuần ISO/tài khoản/mùa/once) kiểm ở server, trong khoá advisory
-//   - webhook: HMAC-SHA256 trên data đã sắp key, idempotent theo provider txn, số tiền phải khớp
+//   - webhook SePay: header Apikey, chỉ transferType=in, mã đơn trong nội dung CK, đúng số tiền, idempotent theo id giao dịch SePay
 //   - sandbox confirm: chỉ khi PAYMENTS_LIVE !== 'true', đi qua CHÍNH handler webhook
 import type { FastifyInstance } from 'fastify'
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { sql, badRequest, conflict, forbidden, notFound, unauthorized, HttpError, type Tx } from '@arcade/core'
 import { CATALOG, LIMIT_MAX, findSku, SEASON, type Sku } from './catalog.ts'
 import { isUnit, PASS_DAYS, type Unit } from '../castle/economy.ts'
@@ -11,29 +11,30 @@ import { lockPlayer, loadProfile, grant } from '../castle/index.ts'
 
 const TZ = 'Asia/Ho_Chi_Minh'
 export const paymentsLive = () => process.env.PAYMENTS_LIVE === 'true'
-const SANDBOX_KEY = 'sandbox-checksum-key'
-function checksumKey(): string {
-  const k = process.env.PAYMENT_CHECKSUM_KEY
+const SANDBOX_KEY = 'sandbox-sepay-key'
+/** API key SePay gửi trong header `Authorization: Apikey <key>`. */
+export function sepayKey(): string {
+  const k = process.env.SEPAY_API_KEY
   if (k) return k
-  if (paymentsLive()) throw new HttpError(503, 'PAYMENTS_MISCONFIGURED', 'thiếu PAYMENT_CHECKSUM_KEY')
+  if (paymentsLive()) throw new HttpError(503, 'PAYMENTS_MISCONFIGURED', 'thiếu SEPAY_API_KEY')
   return SANDBOX_KEY
 }
 
-/** Chuỗi ký của PayOS: key sắp xếp, `k=v` nối bằng `&`; null/undefined -> ''. */
-export function signData(data: Record<string, unknown>, key: string): string {
-  const s = Object.keys(data).sort().map((k) => {
-    const v = data[k]
-    const str = v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v)
-    return `${k}=${str}`
-  }).join('&')
-  return createHmac('sha256', key).update(s).digest('hex')
+function verifyApiKey(header: unknown): boolean {
+  const m = typeof header === 'string' ? /^\s*apikey\s+(\S+)\s*$/i.exec(header) : null
+  if (!m) return false
+  const want = createHash('sha256').update(sepayKey()).digest()
+  const got = createHash('sha256').update(m[1]!).digest()
+  return timingSafeEqual(want, got)
 }
 
-function verifySignature(data: Record<string, unknown>, sig: unknown): boolean {
-  if (typeof sig !== 'string' || !/^[0-9a-f]{64}$/i.test(sig)) return false
-  const want = Buffer.from(signData(data, checksumKey()), 'hex')
-  const got = Buffer.from(sig, 'hex')
-  return want.length === got.length && timingSafeEqual(want, got)
+const CODE_RE = /ARC[A-Z0-9]{8}/i
+/** Mã đơn: trường `code` SePay tách sẵn (theo tiền tố cấu hình), nếu không thì tìm trong nội dung CK. */
+export function orderCodeOf(body: { code?: unknown; content?: unknown; description?: unknown }): string | null {
+  const c = typeof body.code === 'string' ? body.code.trim() : ''
+  if (/^ARC[A-Z0-9]{8}$/i.test(c)) return c.toUpperCase()
+  const m = CODE_RE.exec(`${body.content ?? ''} ${body.description ?? ''}`)
+  return m ? m[0].toUpperCase() : null
 }
 
 const CODE_ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -64,12 +65,12 @@ async function used(tx: Tx, playerId: string, s: Sku): Promise<number> {
 }
 
 function qr(amount: number, code: string) {
-  const bank = process.env.PAYMENT_BANK_BIN ?? '970422'
-  const account = process.env.PAYMENT_BANK_ACCOUNT ?? 'SANDBOX'
-  const name = process.env.PAYMENT_ACCOUNT_NAME ?? 'ARCADE'
-  const imageUrl = `https://img.vietqr.io/image/${bank}-${account}-compact2.png?amount=${amount}` +
-    `&addInfo=${encodeURIComponent(code)}&accountName=${encodeURIComponent(name)}`
-  return { bank, account, amount, content: code, imageUrl }
+  const bank = process.env.PAYMENT_BANK ?? 'MBBank'
+  const account = process.env.PAYMENT_ACCOUNT ?? 'SANDBOX'
+  const accountName = process.env.PAYMENT_ACCOUNT_NAME ?? 'ARCADE'
+  const imageUrl = `https://qr.sepay.vn/img?acc=${encodeURIComponent(account)}&bank=${encodeURIComponent(bank)}` +
+    `&amount=${amount}&des=${encodeURIComponent(code)}`
+  return { provider: 'sepay', bank, account, accountName, amount, content: code, imageUrl }
 }
 
 /** Trao quyền lợi của một đơn đã trả. Chạy trong transaction của webhook. */
@@ -104,32 +105,47 @@ async function fulfil(tx: Tx, o: { id: string; player_id: string; sku: string; p
   }
 }
 
-type WebhookBody = { data?: Record<string, unknown>; signature?: unknown }
+/** Payload webhook SePay (docs.sepay.vn/tich-hop-webhooks.html). */
+export type SepayBody = {
+  id?: unknown; gateway?: unknown; transactionDate?: unknown; accountNumber?: unknown; code?: unknown
+  content?: unknown; transferType?: unknown; transferAmount?: unknown; referenceCode?: unknown; description?: unknown
+}
+export type WebhookResult = { success: true; outcome: string; duplicate?: boolean; orderId?: string }
 
-/** Handler dùng chung cho webhook thật và sandbox confirm. */
-export async function handleWebhook(body: WebhookBody): Promise<{ ok: true; duplicate?: boolean; orderId?: string; outcome?: string }> {
-  const data = body?.data
-  if (!data || typeof data !== 'object') throw badRequest('DATA_REQUIRED')
-  if (!verifySignature(data, body.signature)) throw unauthorized('BAD_SIGNATURE')
-  const code = String(data.orderCode ?? '')
-  const txn = String(data.reference ?? data.transactionId ?? data.paymentLinkId ?? '')
-  if (!txn) throw badRequest('TXN_REQUIRED')
-  const amount = Number(data.amount)
+/** Handler dùng chung cho webhook SePay thật và sandbox confirm.
+ *  Key sai -> 401. Mọi giao dịch hợp lệ đều được ghi vào payment_events (kể cả không cấp đồ)
+ *  và trả 200 {success:true} để SePay không gửi lại; chỉ outcome 'granted' mới cấp quyền lợi. */
+export async function handleWebhook(body: SepayBody, authorization: unknown): Promise<WebhookResult> {
+  if (!verifyApiKey(authorization)) throw unauthorized('BAD_API_KEY')
+  if (!body || typeof body !== 'object') throw badRequest('BODY_REQUIRED')
+  const id = String(body.id ?? '').trim()
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw badRequest('ID_REQUIRED')
+  const txn = `sepay:${id}`
+  const amount = Number(body.transferAmount)
+  const code = orderCodeOf(body)
   return sql.begin(async (t) => {
     const tx = t as Tx
+    const record = async (outcome: string, orderId: string | null) => {
+      const ins = await tx`insert into payment_events (provider_txn, order_id, amount, outcome, payload)
+        values (${txn}, ${orderId}, ${Number.isFinite(amount) ? Math.trunc(amount) : 0}, ${outcome}, ${tx.json(body as never)})
+        on conflict (provider_txn) do nothing returning 1`
+      return ins.length > 0
+    }
+    const done = async (outcome: string, orderId: string | null): Promise<WebhookResult> =>
+      (await record(outcome, orderId))
+        ? { success: true, outcome, ...(orderId ? { orderId } : {}) }
+        : { success: true, outcome: 'duplicate', duplicate: true, ...(orderId ? { orderId } : {}) }
+    if (body.transferType !== 'in') return done('ignored_out', null)
+    if (!code) return done('no_code', null)
     const [o] = await tx<{ id: string; player_id: string; sku: string; amount: number; status: string; params: { unit?: Unit } }[]>`
       select id, player_id, sku, amount, status, params from orders where code = ${code} for update`
-    if (!o) throw notFound('ORDER_NOT_FOUND')
-    if (amount !== o.amount) throw badRequest('AMOUNT_MISMATCH', `cần ${o.amount}, nhận ${amount}`)
-    const outcome = o.status === 'paid' ? 'already_paid' : 'granted'
-    const ins = await tx`insert into payment_events (provider_txn, order_id, amount, outcome, payload)
-      values (${txn}, ${o.id}, ${amount}, ${outcome}, ${tx.json(body as never)}) on conflict (provider_txn) do nothing returning 1`
-    if (!ins.length) return { ok: true as const, duplicate: true, orderId: o.id }
-    if (outcome === 'granted') {
-      await tx`update orders set status = 'paid', paid_at = now() where id = ${o.id}`
-      await fulfil(tx, o)
-    }
-    return { ok: true as const, orderId: o.id, outcome }
+    if (!o) return done('unknown_order', null)
+    if (amount !== Number(o.amount)) return done('amount_mismatch', o.id)
+    if (o.status === 'paid') return done('already_paid', o.id)
+    if (!(await record('granted', o.id))) return { success: true, outcome: 'duplicate', duplicate: true, orderId: o.id }
+    await tx`update orders set status = 'paid', paid_at = now() where id = ${o.id}`
+    await fulfil(tx, o)
+    return { success: true, outcome: 'granted', orderId: o.id }
   })
 }
 
@@ -180,8 +196,8 @@ export async function shopRoutes(app: FastifyInstance): Promise<void> {
     return rows.map((r) => r.sku)
   })
 
-  // Công khai (không Bearer) — chữ ký HMAC là thứ xác thực.
-  app.post('/v1/pay/webhook', async (req) => handleWebhook(req.body as WebhookBody))
+  // Công khai (không Bearer) — header `Authorization: Apikey <SEPAY_API_KEY>` là thứ xác thực.
+  app.post('/v1/pay/webhook', async (req) => handleWebhook(req.body as SepayBody, req.headers.authorization))
 
   app.post('/v1/pay/sandbox/confirm', async (req) => {
     if (paymentsLive()) throw forbidden('SANDBOX_DISABLED', 'PAYMENTS_LIVE=true')
@@ -190,10 +206,12 @@ export async function shopRoutes(app: FastifyInstance): Promise<void> {
     const [o] = await sql<{ code: string; amount: number }[]>`select code, amount from orders
       where id = ${orderId} and player_id = ${req.actor.playerId}`
     if (!o) throw notFound('ORDER_NOT_FOUND')
-    const data = {
-      orderCode: o.code, amount: o.amount, description: o.code, reference: `SBX-${orderId}`,
-      transactionDateTime: new Date().toISOString(), currency: 'VND',
+    // Payload dạng SePay, id cố định theo đơn => bấm lại = gửi trùng.
+    const body: SepayBody = {
+      id: `SBX${orderId.replace(/-/g, '')}`, gateway: 'SANDBOX', transactionDate: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      accountNumber: process.env.PAYMENT_ACCOUNT ?? 'SANDBOX', code: o.code, content: `${o.code} sandbox`,
+      transferType: 'in', transferAmount: Number(o.amount), referenceCode: `SBX-${orderId}`, description: o.code,
     }
-    return handleWebhook({ data, signature: signData(data, checksumKey()) })
+    return handleWebhook(body, `Apikey ${sepayKey()}`)
   })
 }

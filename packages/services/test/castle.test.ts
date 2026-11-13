@@ -5,7 +5,7 @@ import { sql } from '@arcade/core'
 import {
   upgradeCost, statMult, xpToNext, addXp, matchReward, progressQuests, loadout, unlocks, UNITS,
 } from '../src/castle/economy.ts'
-import { signData } from '../src/shop/index.ts'
+import { orderCodeOf } from '../src/shop/index.ts'
 
 // Chạy trên DB riêng (DATABASE_URL=.../arcade_castle_test). Không mock Postgres.
 let app: Awaited<ReturnType<typeof build>>
@@ -25,7 +25,7 @@ const mid = () => `m-${Date.now()}-${seq++}-xxxxxxxx`
 
 before(async () => {
   delete process.env.PAYMENTS_LIVE
-  process.env.PAYMENT_CHECKSUM_KEY = 'test-key'
+  process.env.SEPAY_API_KEY = 'test-key'
   app = await build({ gamesDir: '.', realtime: false })
 })
 after(async () => {
@@ -148,33 +148,89 @@ test('orders: gói vàng 1/ngày, thẻ tự chọn 3/tuần ISO, starter 1/tài
   assert.equal((await post(b, '/v1/orders', { sku: 'castle.skin.bamboo' })).json().error, 'LIMIT_REACHED')
 })
 
-test('order: trả về code ARC+8, QR VietQR, sandbox=true; trạng thái pending→paid', async () => {
+test('order: trả về code ARC+8, QR SePay (số tiền + mã đơn), sandbox=true; trạng thái pending→paid', async () => {
   const a = await guest()
   const o = (await post(a, '/v1/orders', { sku: 'castle.skin.redstone' })).json()
   assert.match(o.code, /^ARC[A-Z0-9]{8}$/)
   assert.equal(o.amount, 39000); assert.equal(o.sandbox, true); assert.equal(o.qr.content, o.code)
+  const u = new URL(o.qr.imageUrl)
+  assert.equal(u.origin + u.pathname, 'https://qr.sepay.vn/img')
+  assert.equal(u.searchParams.get('amount'), '39000'); assert.equal(u.searchParams.get('des'), o.code)
   assert.equal((await get(a, `/v1/orders/${o.orderId}`)).json().status, 'pending')
   await post(a, '/v1/pay/sandbox/confirm', { orderId: o.orderId })
   assert.equal((await get(a, `/v1/orders/${o.orderId}`)).json().status, 'paid')
   assert.deepEqual((await get(a, '/v1/entitlements?game=castle')).json(), ['castle.skin.redstone'])
 })
 
-test('webhook: chữ ký sai bị từ chối, sai số tiền bị từ chối, gửi lại (replay) không cấp hai lần', async () => {
+const hook = (payload: object, key = 'test-key') =>
+  app.inject({ method: 'POST', url: '/v1/pay/webhook', payload, headers: { authorization: `Apikey ${key}` } })
+let sepayId = 900_000_000 + Math.floor(Math.random() * 1e6)
+const sepay = (over: Record<string, unknown>) => ({
+  id: ++sepayId, gateway: 'MBBank', transactionDate: '2026-11-13 10:00:00', accountNumber: '0123', subAccount: null,
+  code: null, content: '', transferType: 'in', description: '', transferAmount: 0, accumulated: 0, referenceCode: 'FT1', ...over,
+})
+const events = async (txn: string) =>
+  sql<{ outcome: string }[]>`select outcome from payment_events where provider_txn = ${'sepay:' + txn}`
+
+test('SePay webhook: key sai 401 (không ghi), sai số tiền không cấp + ghi lại, đúng thì cấp, gửi trùng không cấp hai lần', async () => {
   const a = await guest()
   const o = (await post(a, '/v1/orders', { sku: 'castle.gold.daily' })).json()
-  const data = { orderCode: o.code, amount: 15000, description: o.code, reference: `TXN-${o.orderId}` }
-  const bad = await app.inject({ method: 'POST', url: '/v1/pay/webhook', payload: { data, signature: signData(data, 'wrong-key') } })
+  const ok = sepay({ code: o.code, content: `${o.code} chuyen tien`, transferAmount: 15000 })
+  const bad = await hook(ok, 'wrong-key')
   assert.equal(bad.statusCode, 401)
-  const tampered = { ...data, amount: 1000 }
-  const wrongAmt = await app.inject({ method: 'POST', url: '/v1/pay/webhook', payload: { data: tampered, signature: signData(tampered, 'test-key') } })
-  assert.equal(wrongAmt.json().error, 'AMOUNT_MISMATCH')
+  assert.equal((await events(String(ok.id))).length, 0)
+  const noHeader = await app.inject({ method: 'POST', url: '/v1/pay/webhook', payload: ok })
+  assert.equal(noHeader.statusCode, 401)
+  const low = sepay({ code: o.code, content: o.code, transferAmount: 1000 })
+  const wrongAmt = await hook(low)
+  assert.equal(wrongAmt.statusCode, 200)
+  assert.equal(wrongAmt.json().success, true)
+  assert.equal(wrongAmt.json().outcome, 'amount_mismatch')
+  assert.deepEqual((await events(String(low.id))).map((e) => e.outcome), ['amount_mismatch'])
   assert.equal((await get(a, '/v1/castle/profile')).json().gold, 0)
-  const body = { data, signature: signData(data, 'test-key') }
-  const r1 = await app.inject({ method: 'POST', url: '/v1/pay/webhook', payload: body })
-  const r2 = await app.inject({ method: 'POST', url: '/v1/pay/webhook', payload: body })
+  assert.equal((await get(a, `/v1/orders/${o.orderId}`)).json().status, 'pending')
+  const r1 = await hook(ok)
+  const r2 = await hook(ok)
   assert.equal(r1.json().outcome, 'granted')
   assert.equal(r2.json().duplicate, true)
   assert.equal((await get(a, '/v1/castle/profile')).json().gold, 1500)
+  // giao dịch khác cho đơn đã trả: ghi lại, không cấp thêm
+  const again = await hook(sepay({ code: o.code, content: o.code, transferAmount: 15000 }))
+  assert.equal(again.json().outcome, 'already_paid')
+  assert.equal((await get(a, '/v1/castle/profile')).json().gold, 1500)
+})
+
+test('SePay webhook: nội dung không có mã, mã lạ, tiền ra => ghi lại, không cấp; mã lấy từ nội dung khi code=null', async () => {
+  const a = await guest()
+  const o = (await post(a, '/v1/orders', { sku: 'castle.skin.bamboo' })).json()
+  const none = sepay({ content: 'chuyen tien mua do', transferAmount: o.amount })
+  assert.equal((await hook(none)).json().outcome, 'no_code')
+  assert.deepEqual((await events(String(none.id))).map((e) => e.outcome), ['no_code'])
+  assert.equal((await hook(sepay({ content: 'ARCZZZZZZZZ', transferAmount: o.amount }))).json().outcome, 'unknown_order')
+  assert.equal((await hook(sepay({ code: o.code, content: o.code, transferAmount: o.amount, transferType: 'out' }))).json().outcome, 'ignored_out')
+  assert.equal((await get(a, `/v1/orders/${o.orderId}`)).json().status, 'pending')
+  // ngân hàng có thể chèn tiền tố / viết thường: vẫn khớp
+  const r = await hook(sepay({ code: null, content: `MBVCB.123.${o.code.toLowerCase()}.CT tu 0123`, transferAmount: o.amount }))
+  assert.equal(r.json().outcome, 'granted')
+  assert.deepEqual((await get(a, '/v1/entitlements?game=castle')).json(), ['castle.skin.bamboo'])
+  assert.equal(orderCodeOf({ code: 'ARCABCDEFGH' }), 'ARCABCDEFGH')
+  assert.equal(orderCodeOf({ code: null, content: 'khong co ma' }), null)
+})
+
+test('SePay webhook: thiếu id bị 400; sandbox confirm gửi trùng = duplicate', async () => {
+  assert.equal((await hook({ transferType: 'in', content: 'x' })).statusCode, 400)
+  const a = await guest()
+  const o = (await post(a, '/v1/orders', { sku: 'castle.skin.redstone' })).json()
+  assert.equal((await post(a, '/v1/pay/sandbox/confirm', { orderId: o.orderId })).json().outcome, 'granted')
+  assert.equal((await post(a, '/v1/pay/sandbox/confirm', { orderId: o.orderId })).json().duplicate, true)
+})
+
+test('PAYMENTS_LIVE=true mà thiếu SEPAY_API_KEY: webhook 503, không nhận key sandbox', async () => {
+  const k = process.env.SEPAY_API_KEY
+  process.env.PAYMENTS_LIVE = 'true'; delete process.env.SEPAY_API_KEY
+  try {
+    assert.equal((await hook(sepay({ content: 'x' }), 'sandbox-sepay-key')).statusCode, 503)
+  } finally { delete process.env.PAYMENTS_LIVE; process.env.SEPAY_API_KEY = k }
 })
 
 test('sandbox confirm bị tắt khi PAYMENTS_LIVE=true', async () => {

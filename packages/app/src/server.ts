@@ -15,7 +15,7 @@ const PUBLIC_ROUTES = new Set(['/', '/*'])
 const PUBLIC_PREFIXES = ['/v1/auth/guest', '/v1/auth/refresh', '/health', '/metrics', '/favicon.ico', '/g/',
   // Danh mục hub + danh sách template là dữ liệu công khai; tạo game thì không.
   '/v1/games', '/v1/forge/templates',
-  // Webhook thanh toán: xác thực bằng chữ ký HMAC, không có Bearer.
+  // Webhook SePay: xác thực bằng header Apikey, không có Bearer.
   '/v1/pay/webhook']
 
 export type BuildOpts = {
