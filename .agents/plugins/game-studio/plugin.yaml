@@ -11,3 +11,10 @@ mcp:
   arcade:
     command: ${plugin_dir}/bin/arcade
     args: [mcp]
+  # Blender tương tác (art 2.5D): cần Blender đang mở + addon (`uvx mcp-for-blender install-addon`,
+  # N-panel → Start). Đường headless không cần cái này: action sprites_render của `arcade`.
+  blender:
+    command: uvx
+    args: [mcp-for-blender]
+    env:
+      DISABLE_TELEMETRY: "true"
