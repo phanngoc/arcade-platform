@@ -1,0 +1,5 @@
+# Plugin của repo arcade-platform — có khi agent làm việc trong repo này (hoặc dự án ch_arcade).
+name: game-studio
+version: 1.0.0
+description: Làm game trình duyệt từ prompt — spec, build, playtest, iterate, ship — với bài học từ các game arcade.
+provides: [game-studio]

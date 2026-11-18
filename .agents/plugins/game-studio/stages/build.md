@@ -1,12 +1,3 @@
----
-name: game-build
-version: 1.0.0
-description: |
-  Viết code game từ spec.json theo template, trên Arcade SDK (hoặc vanilla JS nếu chưa có platform).
-  Dùng sau /game-spec. Đầu ra là game chạy được ở local, chưa verify — /game-playtest lo phần đó.
-allowed-tools: [Bash, Read, Write, Edit, Glob, Grep]
----
-
 # game-build — spec thành code
 
 ## Quy ước bắt buộc (rút từ 3 game đã làm)
@@ -18,7 +9,7 @@ allowed-tools: [Bash, Read, Write, Edit, Glob, Grep]
 3. **Tách engine khỏi UI.** `engine.js` = logic thuần, test được, không chạm DOM; `game.js` = render + input.
    `rumba` làm đúng (generator + solver kiểm tra nghiệm duy nhất nằm trong engine) → sửa UI không sợ vỡ luật.
 4. **Tham số cân bằng đặt thành hằng số có tên, ở đầu file**, kèm comment đơn vị:
-   `var GRAV = 1500;  // px/s^2`. Không rải magic number trong logic — /game-iterate cần sửa số này.
+   `var GRAV = 1500;  // px/s^2`. Không rải magic number trong logic — `stages/iterate.md` cần sửa số này.
 5. **DPR cap = 2.** `Math.min(window.devicePixelRatio || 1, 2)` — hơn nữa chỉ tốn fill rate trên mobile.
 6. **Không cấp phát trong vòng lặp render.** Tái dùng object/array; đây là nguyên nhân giật số 1 trên mobile.
 
@@ -38,4 +29,4 @@ State phải là JSON thuần trong `room.state` — không tự serialize, khô
 ## Đầu ra
 
 Game chạy được ở local + `arcade.toml` (hoặc `server.js` tối thiểu nếu chưa lên platform).
-Chuyển ngay sang /game-playtest — **không tự tuyên bố "xong"** trước khi qua cổng verify.
+Chuyển ngay sang `stages/playtest.md` — **không tự tuyên bố "xong"** trước khi qua cổng verify.

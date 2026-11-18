@@ -1,12 +1,3 @@
----
-name: game-iterate
-version: 1.0.0
-description: |
-  Sửa game đang chạy từ phản hồi người chơi hoặc từ log fail của /game-playtest — bằng patch nhỏ,
-  không build lại từ đầu. Dùng khi nghe "địch nhanh quá", "thêm màn", "không chơi được trên iPhone".
-allowed-tools: [Bash, Read, Write, Edit, Glob, Grep]
----
-
 # game-iterate — vòng sửa
 
 ## Nguyên tắc
@@ -15,9 +6,9 @@ allowed-tools: [Bash, Read, Write, Edit, Glob, Grep]
    đã tinh chỉnh bằng tay.
 2. **Phản hồi cảm tính → tham số cụ thể.** "Địch nhanh quá" → đổi hằng số `speed` nào, từ bao nhiêu sang
    bao nhiêu. Nói rõ con số cho người dùng, đừng nói "đã giảm tốc độ".
-3. **Cập nhật `spec.json` cùng lúc.** Spec lệch code thì /game-playtest sinh test sai. Nếu thay đổi phá vỡ
+3. **Cập nhật `spec.json` cùng lúc.** Spec lệch code thì `stages/playtest.md` sinh test sai. Nếu thay đổi phá vỡ
    một ràng buộc trong `spec.balance` → sửa ràng buộc đó, đừng lặng lẽ vi phạm.
-4. **Chạy lại /game-playtest** sau mỗi patch. Sửa cân bằng rất dễ làm game không thể thắng được nữa.
+4. **Chạy lại `stages/playtest.md`** sau mỗi patch. Sửa cân bằng rất dễ làm game không thể thắng được nữa.
 5. **Commit từng patch riêng** với thông điệp nói rõ số cũ → số mới. Đây là thứ giúp rollback được khi
    một thay đổi "nghe hợp lý" làm game dở đi.
 
