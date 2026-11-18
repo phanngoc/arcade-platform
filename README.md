@@ -17,7 +17,7 @@ mỗi game là một repo riêng và là test case của abstraction.
 | [PLATFORM_DESIGN.md](PLATFORM_DESIGN.md) | Thiết kế kỹ thuật: abstraction, realtime engine, data model, AI Forge, roadmap |
 | [BUSINESS_MODEL.md](BUSINESS_MODEL.md) | Thị trường, giá đối thủ, unit economics, bảng giá, 3 kịch bản tài chính, định giá, kill criteria |
 | [IMPLEMENTATION.md](IMPLEMENTATION.md) | Design cho implement M0+M1: kiến trúc stateless⟂stateful, Postgres JSONB + Redis, stack đã chốt, giao thức, migration, 24 việc có thứ tự |
-| [SKILL_CHAIN.md](SKILL_CHAIN.md) | 5 skill làm game (`skills/`) và cách đóng gói vào platform |
+| [SKILL_CHAIN.md](SKILL_CHAIN.md) | Dây chuyền làm game (plugin `.agents/plugins/game-studio/`) và cách đóng gói vào platform |
 
 PLATFORM_DESIGN.md — thiết kế platform "Supabase cho game": backend realtime/storage
 dùng chung cho nhiều game + lớp AI Forge sinh game từ prompt. 3 game trên là bộ test case đầu tiên của

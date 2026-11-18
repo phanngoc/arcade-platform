@@ -192,7 +192,7 @@ arcade/
 │   ├── cli/               # arcade dev|deploy|test|typegen|bench
 │   └── bench/             # sinh tải headless — công cụ cho kill criteria M1
 ├── templates/
-│   ├── canvas2d-offline/          # + AGENTS.md, CLAUDE.md sinh từ skills/game-build
+│   ├── canvas2d-offline/          # + AGENTS.md, CLAUDE.md sinh từ .agents/plugins/game-studio/stages/build.md
 │   └── canvas2d-authoritative-mp/
 ├── migrations/            # 001_init.sql, 002_...
 ├── examples/tank-battle/  # bản port — bằng chứng abstraction đúng

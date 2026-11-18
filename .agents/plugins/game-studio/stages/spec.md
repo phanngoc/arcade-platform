@@ -1,16 +1,6 @@
----
-name: game-spec
-version: 1.0.0
-description: |
-  Biến một prompt mô tả game thành GameSpec JSON có cấu trúc, trước khi viết code.
-  Dùng khi người dùng nói "làm game ...", "clone game ...", "tôi muốn một game ...".
-  Đầu ra là spec.json — input ổn định cho /game-build và là nguồn sinh test case cho /game-playtest.
-allowed-tools: [Bash, Read, Write, WebSearch, WebFetch]
----
-
 # game-spec — prompt thành GameSpec
 
-Không nhảy thẳng từ prompt vào code. Sửa spec rẻ hơn sửa code, và spec là thứ /game-playtest
+Không nhảy thẳng từ prompt vào code. Sửa spec rẻ hơn sửa code, và spec là thứ `stages/playtest.md`
 dùng để sinh test case.
 
 ## Bước 1 — Nếu là clone một game có thật, đi tìm cơ chế thật
@@ -55,4 +45,4 @@ thiếu ràng buộc này thì bắn cả trận mà HP không giảm, và bug n
 ## Đầu ra
 
 Ghi `spec.json` vào thư mục game. In lại cho người dùng phần `loop`, `winCondition`, `controls`,
-`balance` và hỏi có sửa gì không — trước khi gọi /game-build.
+`balance` và hỏi có sửa gì không — trước khi gọi `stages/build.md`.

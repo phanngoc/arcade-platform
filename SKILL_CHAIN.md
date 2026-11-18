@@ -1,6 +1,6 @@
 # Dây chuyền skill làm game → đóng gói vào platform
 
-> 5 skill trong [`skills/`](skills/) là **dây chuyền sản xuất** đã dùng để làm tank-battle, castle, rumba.
+> 5 bước trong plugin [`game-studio`](.agents/plugins/game-studio/) (mỗi bước một file `stages/*.md`) là **dây chuyền sản xuất** đã dùng để làm tank-battle, castle, rumba.
 > Đây cũng chính là phần Forge của [PLATFORM_DESIGN.md](PLATFORM_DESIGN.md) — không phải hai thứ khác nhau.
 
 ---
@@ -49,14 +49,14 @@ tập lỗi đã gặp và các cổng chặn được dựng lên vì chúng.**
 
 | Tầng | Ai chạy | Hình thù | Trạng thái |
 |---|---|---|---|
-| **T1 — Skill local** | Người dùng gõ `/game-spec` trong Claude Code | 5 file `SKILL.md` trong `skills/` | **Xong, dùng được ngay** |
+| **T1 — Skill local** | Agent bomclaw trong repo / dự án arcade, hoặc `/game-studio` trong Claude Code | plugin `.agents/plugins/game-studio/`: `SKILL.md` dẫn đường + `stages/*.md` | **Xong, dùng được ngay** |
 | **T2 — Forge agent** | Runner của platform, tự động | Cùng nội dung, đóng thành system prompt của Spec/Build/Fix Agent; `/game-playtest` thành harness CI | M2 |
 | **T3 — Hộp prompt người dùng** | Người không code | Người dùng chỉ thấy ô nhập + link game; T1/T2 chạy ngầm | M2–M3 |
 
 **Một nguồn chân lý duy nhất:** nội dung skill ở T1 là bản gốc. Forge (T2) đọc chính các file này làm
 system prompt, không viết lại — nếu tách đôi thì hai bên trôi khỏi nhau và bug quay lại.
-Cụ thể: mỗi template trong platform mang theo `AGENTS.md` + `CLAUDE.md` được sinh từ `skills/game-build/SKILL.md`,
-và `arcade test` chạy đúng các cổng trong `skills/game-playtest/SKILL.md`.
+Cụ thể: mỗi template trong platform mang theo `AGENTS.md` + `CLAUDE.md` được sinh từ `.agents/plugins/game-studio/stages/build.md`,
+và `arcade test` chạy đúng các cổng trong `.agents/plugins/game-studio/stages/playtest.md`.
 
 **Hệ quả:** người thật và agent bị chấm bằng **cùng một thước đo**. Đó là điều kiện để tin kết quả của Forge.
 
@@ -75,6 +75,11 @@ và `arcade test` chạy đúng các cổng trong `skills/game-playtest/SKILL.md
 
 ## 5. Dùng ngay
 
-5 skill đã được symlink vào `~/.claude/skills/` → gõ `/game-spec`, `/game-build`, `/game-playtest`,
-`/game-ship`, `/game-iterate` trong bất kỳ session nào. Sửa file trong `games/skills/` là cập nhật luôn
-(symlink, không phải bản sao). Gỡ: xoá symlink trong `~/.claude/skills/`.
+Dây chuyền là một plugin bomclaw ở `.agents/plugins/game-studio/` (plugin của repo, kiểu project):
+agent bomclaw làm việc trong repo này tự thấy nó, chỉ tốn một dòng trong danh sách skill; từng bước đọc
+khi cần (`stages/spec.md` … `stages/ship.md`).
+
+Trong Claude Code: `ln -s <repo>/.agents/plugins/game-studio ~/.claude/skills/game-studio` → gõ `/game-studio`
+ở bất kỳ session nào. Symlink, không phải bản sao: sửa file trong repo là cập nhật luôn. Sửa một bước = sửa
+file `stages/` của bước đó — đây là bản gốc duy nhất, đừng chép ra chỗ khác (`skills/` cũ đã trôi khỏi bản
+thật một lần: `game-ship` còn hướng dẫn launchd sau khi đã chuyển sang pm2).
