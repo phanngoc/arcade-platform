@@ -49,9 +49,13 @@ switch (cmd) {
     run('npx', ['tsc', '-p', 'tsconfig.json', '--noEmit'])
     console.log('▸ G1 tĩnh: ngân sách kích thước SDK')
     run('node', ['packages/sdk/build.ts'])
-    console.log('▸ G2/G3/G4: test tích hợp trên Postgres + Redis thật')
+    console.log('▸ G2/G3/G4: test tích hợp trên Postgres + Redis (database arcade_test, Redis db 1 — .env.test)')
+    if (!existsSync('.env.test')) { console.error('✗ thiếu .env.test'); process.exit(1) }
+    run('node', ['--env-file=.env.test', 'scripts/test-guard.ts'])
     // Đường dẫn file tường minh: truyền thư mục thì node:test treo chờ event loop.
-    run('node', ['--env-file=.env', '--test', ...rest.length ? rest : [
+    // Tuần tự: các file dùng chung một DB/Redis, và mỗi file chạy app với write-behind
+    // 5 giây của riêng nó — song song thì hai tiến trình ghi đè nhau, test chập chờn.
+    run('node', ['--env-file=.env.test', '--test', '--test-concurrency=1', ...rest.length ? rest : [
       'packages/protocol/test/patch.test.ts',
       'packages/protocol/test/roomcode.test.ts',
       'packages/gamekit/test/gamekit.test.ts',
