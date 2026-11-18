@@ -2,6 +2,7 @@
 // arcade — CLI. Mục tiêu: một máy sạch chạy được toàn bộ stack bằng một lệnh.
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, copyFileSync } from 'node:fs'
+import { validateGame, formatCheck } from '@arcade/gamekit'
 
 const cmd = process.argv[2] ?? 'help'
 const rest = process.argv.slice(3)
@@ -52,6 +53,7 @@ switch (cmd) {
     run('node', ['--env-file=.env', '--test', ...rest.length ? rest : [
       'packages/protocol/test/patch.test.ts',
       'packages/protocol/test/roomcode.test.ts',
+      'packages/gamekit/test/gamekit.test.ts',
       'packages/core/test/redis-keys.test.ts',
       'packages/services/test/api.test.ts',
       'packages/services/test/hub.test.ts',
@@ -77,6 +79,31 @@ switch (cmd) {
     break
   }
 
+  case 'spec': {
+    // Cổng G1 tĩnh của MỘT GAME: arcade.toml + spec.json, từng file và chéo nhau.
+    // Không cần DB hay browser — là thứ chạy đầu tiên, ở CI và ở agent.
+    const sub = rest[0]
+    if (sub !== 'validate') { console.error('dùng: arcade spec validate [thư-mục-game…] [--json]'); process.exit(2) }
+    const json = rest.includes('--json')
+    const dirs = rest.slice(1).filter((a) => a !== '--json')
+    const checks = (dirs.length ? dirs : ['.']).map((d) => validateGame(d))
+    if (json) console.log(JSON.stringify(checks.map(({ dir, ok, problems }) => ({ dir, ok, problems })), null, 2))
+    else {
+      for (const c of checks) console.log(formatCheck(c))
+      const bad = checks.filter((c) => !c.ok).length
+      console.log(`\n${checks.length - bad}/${checks.length} game qua`)
+    }
+    process.exit(checks.every((c) => c.ok) ? 0 : 1)
+  }
+
+  case 'manifest': {
+    // Thứ games.manifest trong DB phải chứa — sinh từ arcade.toml, không chép tay.
+    const c = validateGame(rest[0] ?? '.')
+    if (!c.manifest) { console.error(formatCheck(c)); process.exit(1) }
+    console.log(JSON.stringify(c.manifest, null, 2))
+    break
+  }
+
   default:
     console.log(`arcade — CLI
 
@@ -86,6 +113,9 @@ switch (cmd) {
   arcade bench    sinh tải, in CCU/vCPU + p99 tick + băng thông (kill criteria M1)
   arcade health   kiểm tra server có sống không
   arcade down     tắt Postgres + Redis
+
+  arcade spec validate [dir…] [--json]  kiểm arcade.toml + spec.json của game (G1 tĩnh)
+  arcade manifest [dir]                 in manifest (từ arcade.toml) mà platform lưu vào DB
 
   deploy/typegen: M2+`)
 }

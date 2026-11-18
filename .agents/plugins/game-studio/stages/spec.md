@@ -44,5 +44,13 @@ thiếu ràng buộc này thì bắn cả trận mà HP không giảm, và bug n
 
 ## Đầu ra
 
-Ghi `spec.json` vào thư mục game. In lại cho người dùng phần `loop`, `winCondition`, `controls`,
+Ghi `spec.json` vào thư mục game, cạnh `arcade.toml`. Rồi chạy (ở repo arcade-platform):
+
+```
+node packages/cli/src/index.ts spec validate <thư-mục-game>
+```
+
+Lệnh này là hợp đồng GameSpec v1 (`packages/gamekit/src/spec.ts`) — nó, không phải ví dụ JSON ở
+trên, quyết định spec hợp lệ. Nó cũng kiểm `arcade.toml` và hai file khớp nhau (id, mode, maxPlayers).
+**Chưa qua thì chưa sang build.** Khoá ngoài v1 chỉ là cảnh báo; `balance` dạng object là lỗi. In lại cho người dùng phần `loop`, `winCondition`, `controls`,
 `balance` và hỏi có sửa gì không — trước khi gọi `stages/build.md`.
