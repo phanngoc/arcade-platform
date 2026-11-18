@@ -11,11 +11,12 @@
   "scripts": {
     "dev": "node packages/cli/src/index.ts dev",
     "migrate": "node scripts/migrate.ts",
-    "test": "node --env-file=.env --test packages/protocol/test/patch.test.ts packages/protocol/test/roomcode.test.ts packages/gamekit/test/gamekit.test.ts packages/studio/test/scaffold.test.ts packages/studio/test/studio.test.ts packages/core/test/redis-keys.test.ts packages/services/test/api.test.ts packages/services/test/hub.test.ts packages/services/test/analytics.test.ts packages/services/test/castle.test.ts packages/roomd/test/realtime.test.ts",
+    "test": "node --env-file=.env.test scripts/test-guard.ts && node --env-file=.env.test --test --test-concurrency=1 packages/protocol/test/patch.test.ts packages/protocol/test/roomcode.test.ts packages/gamekit/test/gamekit.test.ts packages/studio/test/scaffold.test.ts packages/studio/test/studio.test.ts packages/core/test/redis-keys.test.ts packages/services/test/api.test.ts packages/services/test/hub.test.ts packages/services/test/analytics.test.ts packages/services/test/castle.test.ts packages/roomd/test/realtime.test.ts",
     "lint:deps": "node scripts/lint-deps.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build:sdk": "node packages/sdk/build.ts",
-    "bench": "node --env-file=.env packages/bench/src/index.ts"
+    "bench": "node --env-file=.env packages/bench/src/index.ts",
+    "test:setup": "node --env-file=.env.test scripts/test-setup.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

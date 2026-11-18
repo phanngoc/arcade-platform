@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { sql, badRequest, forbidden } from '@arcade/core'
-import { submit, top, around, flushAll } from './store.ts'
+import { submit, top, around, flushAll, setOrphanReporter } from './store.ts'
 import { assertStandardMatch, CASTLE_GAME_ID } from '../castle/index.ts'
 
 export { flushAll, flushDirty } from './store.ts'
@@ -66,6 +66,8 @@ export async function leaderboardRoutes(app: FastifyInstance): Promise<void> {
   // Write-behind: đẩy điểm sang Postgres theo lô. Chu kỳ 5s -> cửa sổ mất tối đa 5s
   // nếu Redis chết, và lần khởi động sau sẽ nạp lại từ Postgres.
   let closing = false
+  setOrphanReporter((gameId, members) =>
+    app.log.warn({ gameId, count: members.length, sample: members.slice(0, 5) }, 'leaderboard: gỡ điểm của người chơi không còn tồn tại'))
   const timer = setInterval(() => {
     if (closing) return
     flushAll().catch((e) => app.log.error({ err: e }, 'leaderboard write-behind lỗi'))

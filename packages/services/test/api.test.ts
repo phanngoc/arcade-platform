@@ -140,6 +140,24 @@ test('write-behind: điểm xuống được Postgres, và nạp lại được 
   assert.equal(mine.name, 'Flush')
 })
 
+// Hồi quy 13–18/11/2026: người chơi bị xoá khỏi Postgres mà điểm còn trong hàng chờ
+// Redis → khoá ngoại hỏng → CẢ LÔ rollback mãi, kéo theo điểm thật (castle: 26 ma, 8 thật).
+test('write-behind: điểm của người chơi đã bị xoá bị gỡ khỏi bảng, không chặn điểm thật cùng lô', async () => {
+  await resetBoard()
+  const ghost = await guest()
+  const real = await guest()
+  await app.inject({ method: 'POST', url: '/v1/leaderboard/daily', headers: ghost.h, payload: { score: 900, name: 'Ma' } })
+  await app.inject({ method: 'POST', url: '/v1/leaderboard/daily', headers: real.h, payload: { score: 500, name: 'Thật' } })
+  await sql`delete from players where id = ${ghost.id}`
+
+  await flushAll() // trước đây: ném lỗi khoá ngoại, không ghi được gì
+
+  const rows = await sql<{ player_id: string }[]>`select player_id from leaderboard_entries where game_id = ${GAME} and board = 'daily'`
+  assert.deepEqual(rows.map((r) => r.player_id), [real.id], 'điểm thật phải xuống được Postgres')
+  assert.equal(await redis.zscore(key.board(GAME, 'daily'), ghost.id), null, 'người ma phải biến khỏi bảng đang hiển thị')
+  assert.equal(await redis.scard(key.boardDirty(GAME)), 0, 'hàng chờ phải trống — không thử lại mãi')
+})
+
 test('bundle: chặn path traversal đã mã hoá', async () => {
   for (const u of ['/g/castle/%2e%2e/%2e%2e/.env', '/g/castle/..%2f..%2f.env']) {
     const r = await app.inject({ method: 'GET', url: u })

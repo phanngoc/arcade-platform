@@ -112,6 +112,33 @@ export async function flushDirty(gameId: string): Promise<number> {
     })
   }
 
+  // Người chơi đã bị xoá (tài khoản bị gỡ, dữ liệu test dọn khỏi Postgres) mà
+  // điểm còn trong Redis: insert sẽ vi phạm khoá ngoại và — vì cả lô chung một
+  // transaction — kéo theo mọi điểm HỢP LỆ cùng lô, mãi mãi (castle, 13/11/2026:
+  // 26 điểm "ma" chặn 8 điểm thật suốt 5 ngày, 36k dòng lỗi). Điểm của người không
+  // còn tồn tại thì không còn ai để xếp hạng: gỡ khỏi bảng luôn, có log.
+  const orphans: string[] = []
+  if (rows.length) {
+    const ids = [...new Set(rows.map((r) => r.playerId))]
+    const alive = new Set((await sql<{ id: string }[]>`select id from players where id = any(${ids}::uuid[])`).map((r) => r.id))
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const r = rows[i]!
+      if (alive.has(r.playerId)) continue
+      orphans.push(`${r.board}|${r.playerId}`)
+      rows.splice(i, 1)
+    }
+    if (orphans.length) {
+      const pipe = redis.pipeline()
+      for (const m of orphans) {
+        const [board, playerId] = [m.slice(0, m.indexOf('|')), m.slice(m.indexOf('|') + 1)]
+        pipe.zrem(key.board(gameId, board), playerId)
+        pipe.hdel(metaKey(gameId, board), playerId)
+      }
+      await pipe.exec()
+      onOrphans?.(gameId, orphans)
+    }
+  }
+
   if (rows.length) {
     // Vai owner: ghi thay cho nhiều người chơi nên nằm ngoài RLS một cách có chủ đích.
     // Upsert từng dòng trong một transaction thay vì helper insert nhiều dòng —
@@ -133,9 +160,30 @@ export async function flushDirty(gameId: string): Promise<number> {
   return rows.length
 }
 
+/** Báo cho log khi gỡ điểm của người chơi không còn tồn tại (đặt ở index.ts). */
+let onOrphans: ((gameId: string, members: string[]) => void) | null = null
+export function setOrphanReporter(f: typeof onOrphans): void {
+  onOrphans = f
+}
+
+/**
+ * Mỗi game một lần thử, độc lập: một game lỗi không được chặn game đứng sau
+ * nó trong danh sách (trước đây lỗi ở castle — thứ 3 — làm mọi game sau nó
+ * không được ghi). Lỗi gom lại và ném ra SAU khi đã thử hết.
+ */
 export async function flushAll(): Promise<number> {
   const games = await sql<{ id: string }[]>`select id from games`
   let n = 0
-  for (const g of games) n += await flushDirty(g.id)
+  const failed: { gameId: string; err: unknown }[] = []
+  for (const g of games) {
+    try {
+      n += await flushDirty(g.id)
+    } catch (err) {
+      failed.push({ gameId: g.id, err })
+    }
+  }
+  if (failed.length) {
+    throw new AggregateError(failed.map((f) => f.err), `write-behind lỗi ở ${failed.map((f) => f.gameId).join(', ')}`)
+  }
   return n
 }
