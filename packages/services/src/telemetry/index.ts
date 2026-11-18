@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { sql } from '@arcade/core'
+import { gaConfig, sendToGa } from '../analytics/index.ts'
 
 type Ev = { name: string; props?: Record<string, unknown>; ts?: string }
 const queue: { gameId: string; playerId: string; name: string; props: unknown }[] = []
@@ -20,6 +21,8 @@ export async function telemetryRoutes(app: FastifyInstance): Promise<void> {
   const timer = setInterval(async () => {
     if (closing || !queue.length) return
     const batch = queue.splice(0, 500)
+    // Bản sao sang Google Analytics (Measurement Protocol) — no-op khi thiếu khoá.
+    void sendToGa(gaConfig(), batch)
     try {
       await sql.begin(async (tx) => {
         for (const e of batch) {

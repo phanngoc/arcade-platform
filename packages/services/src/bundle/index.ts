@@ -1,9 +1,10 @@
 // Phục vụ bundle tĩnh của game. Thay thế server.js tự viết trong từng game.
 import type { FastifyInstance } from 'fastify'
 import { createReadStream } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { stat, readFile } from 'node:fs/promises'
 import { join, normalize, extname, resolve } from 'node:path'
 import { sql, notFound } from '@arcade/core'
+import { gaConfig, injectGtag } from '../analytics/index.ts'
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -99,6 +100,13 @@ export async function bundleRoutes(app: FastifyInstance, opts: { gamesDir: strin
     try { size = (await stat(file)).size } catch { throw notFound('FILE_NOT_FOUND') }
 
     reply.header('content-type', TYPES[extname(file)] ?? 'application/octet-stream')
+    // Trang HTML: chèn Google Analytics nếu env có GA_MEASUREMENT_ID.
+    const ga = extname(file) === '.html' ? gaConfig() : null
+    if (ga) {
+      const html = injectGtag(await readFile(file, 'utf8'), ga.measurementId, { game_id: gameId })
+      reply.header('cache-control', 'no-cache')
+      return reply.send(html)
+    }
     reply.header('content-length', String(size))
     // Bundle chưa có version bất biến -> không cache lâu.
     reply.header('cache-control', 'no-cache')
