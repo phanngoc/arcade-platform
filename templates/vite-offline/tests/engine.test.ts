@@ -1,24 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import * as C from '../src/config';
-import { createState, start, step, botTarget, toward, type Dir } from '../src/engine';
+import { createState, start, step, type Dir } from '../src/engine';
+import { studio } from '../src/studio';
 
 const DT = 1 / 60;
 
-const DT_REACT = 0.2; // s — phản xạ người: bot chọn đích mỗi 200ms, giữa đó chỉ đi tới đích
-const REACT_TICKS = Math.round(DT_REACT / DT);
-
-type Policy = (s: ReturnType<typeof createState>) => Dir;
-
-function run(seed: number, policy: Policy | 'bot', maxSeconds = C.WIN_SECONDS + 1) {
+function run(seed: number, policy: (s: ReturnType<typeof createState>) => Dir, maxSeconds = C.WIN_SECONDS + 1) {
   const s = createState(seed);
   start(s);
-  let target = s.px;
-  for (let i = 0; i < maxSeconds / DT && s.phase === 'play'; i++) {
-    if (policy === 'bot') {
-      if (i % REACT_TICKS === 0) target = botTarget(s);
-      step(s, toward(s, target), DT);
-    } else step(s, policy(s), DT);
-  }
+  for (let i = 0; i < maxSeconds / DT && s.phase === 'play'; i++) step(s, policy(s), DT);
   return s;
 }
 
@@ -45,9 +35,17 @@ describe('luật', () => {
 });
 
 describe('G3 — chơi được: bot thắng được', () => {
+  // Cùng bot với Studio (src/studio.ts): thứ developer thấy trong Studio là thứ test chấm.
   it('bot phản xạ 200ms thắng ≥ 18/20 seed', () => {
     let wins = 0;
-    for (let seed = 1; seed <= 20; seed++) if (run(seed, 'bot').phase === 'won') wins++;
+    for (let seed = 1; seed <= 20; seed++) if (studio.simulate(seed).won) wins++;
     expect(wins).toBeGreaterThanOrEqual(18);
+  });
+
+  it('studio: hợp đồng đủ — config có mọi số, replay có khung hình', () => {
+    expect(studio.config.PLAYER_SPEED).toBe(C.PLAYER_SPEED);
+    const r = studio.simulate(1, { record: 0.5, maxSeconds: 3 });
+    expect(r.frames!.length).toBeGreaterThanOrEqual(6);
+    expect(r.frames![0]!.shapes.some((x) => x.label === 'bot')).toBe(true);
   });
 });

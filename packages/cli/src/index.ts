@@ -3,7 +3,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, copyFileSync } from 'node:fs'
 import { validateGame, formatCheck } from '@arcade/gamekit'
-import { scaffold, nextSteps, TEMPLATE_DIRS, actions, callAction, serveMcp } from '@arcade/studio'
+import { scaffold, nextSteps, TEMPLATE_DIRS, actions, callAction, serveMcp, startStudio } from '@arcade/studio'
 
 const cmd = process.argv[2] ?? 'help'
 const rest = process.argv.slice(3)
@@ -127,6 +127,16 @@ switch (cmd) {
     break
   }
 
+  case 'studio': {
+    // arcade studio [thư-mục-game | thư-mục-chứa-game] [--port 4310] — trang review cho developer.
+    const i = rest.indexOf('--port')
+    const port = i >= 0 ? Number(rest[i + 1]) : 4310
+    const target = rest.find((a, j) => !a.startsWith('--') && rest[j - 1] !== '--port') ?? '.'
+    const s = await startStudio({ target, port })
+    console.log(`Arcade Studio: ${s.url}  (Ctrl-C để dừng; chỉ nghe 127.0.0.1)`)
+    break
+  }
+
   case 'mcp':
     // MCP server qua stdio cho agent. Không in gì ra stdout ngoài JSON-RPC.
     await serveMcp()
@@ -152,6 +162,7 @@ switch (cmd) {
 
   arcade actions                        mọi thao tác (✎ = có ghi); cùng danh sách agent thấy qua MCP
   arcade call <action> [json]           gọi một thao tác, in JSON
+  arcade studio [dir] [--port 4310]     trang review: kịch bản, gameplay (balance, đường cong, bot, phát lại), resource
   arcade mcp                            MCP server (stdio) cho agent — plugin game-studio khai nó
   arcade new <id> [--template t] [--name n] [--dir d] [--spec f]  dựng game mới từ template (vite-offline | vite-authoritative-mp)
   arcade spec validate [dir…] [--json]  kiểm arcade.toml + spec.json của game (G1 tĩnh)

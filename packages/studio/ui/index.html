@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Arcade Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Cpath d='M9 21l5-10 4 7 3-4 3 7z' fill='white'/%3E%3C/svg%3E" />
+<style>
+/* Token theo vai trò; dark là bậc riêng của cùng ramp (dataviz/palette.md), không tự lật. */
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2; --surface: #fcfcfb; --surface-2: #f0efec; --border: #e2e1dc;
+  --text: #0b0b0b; --text-2: #52514e; --muted: #7a7974;
+  --accent: #2a78d6; --series-1: #2a78d6;
+  --good: #0ca30c; --critical: #d03b3b; --warning: #fab219;
+  --grid: #e8e7e2; --code-bg: #f0efec;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg: #111110; --surface: #1a1a19; --surface-2: #232321; --border: #33332f;
+    --text: #f0efec; --text-2: #c3c2b7; --muted: #8f8e86;
+    --accent: #3987e5; --series-1: #3987e5; --grid: #2b2b28; --code-bg: #232321;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --surface: #1a1a19; --surface-2: #232321; --border: #33332f;
+  --text: #f0efec; --text-2: #c3c2b7; --muted: #8f8e86;
+  --accent: #3987e5; --series-1: #3987e5; --grid: #2b2b28; --code-bg: #232321;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+header { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 16px; }
+header h1 { font-size: 15px; margin: 0; }
+header select { font: inherit; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); max-width: 100%; }
+nav { display: flex; gap: 2px; flex-wrap: wrap; }
+nav button { font: inherit; border: 0; background: none; color: var(--text-2); padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+nav button[aria-selected="true"] { background: var(--surface-2); color: var(--text); font-weight: 600; }
+main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
+.card h2 { font-size: 14px; margin: 0 0 4px; }
+.card .sub { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+.grid2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.lead { font-size: 17px; margin: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--text-2); font-weight: 600; border-bottom: 1px solid var(--border); padding: 6px 8px; }
+td { border-bottom: 1px solid var(--grid); padding: 6px 8px; vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+.scroll { overflow-x: auto; }
+code, .mono { font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); }
+.st-good { color: var(--good); } .st-bad { color: var(--critical); } .st-warn { color: var(--text-2); }
+.tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.tile { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
+.tile .k { color: var(--text-2); font-size: 12px; }
+.tile .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tile .d { color: var(--muted); font-size: 12px; }
+button.act, .act { font: inherit; padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; }
+button.act.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.act:disabled { opacity: .5; cursor: default; }
+input[type=number] { font: inherit; width: 96px; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-variant-numeric: tabular-nums; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.err { color: var(--critical); white-space: pre-wrap; }
+.meter { height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.meter > i { display: block; height: 100%; background: var(--series-1); border-radius: 999px; }
+/* biểu đồ */
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .axis text { fill: var(--muted); font-size: 11px; }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .baseline { stroke: var(--text-2); stroke-width: 1; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 6px 8px; font-size: 12px; box-shadow: 0 4px 16px rgb(0 0 0 / .12); white-space: nowrap; transform: translate(-50%, calc(-100% - 10px)); }
+.tip[hidden] { display: none; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); margin-top: 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+/* phát lại */
+.replay { display: grid; gap: 12px; grid-template-columns: minmax(180px, 280px) 1fr; align-items: start; }
+@media (max-width: 640px) { .replay { grid-template-columns: 1fr; } }
+.replay canvas { width: 100%; background: #0b1020; border-radius: 10px; display: block; }
+input[type=range] { width: 100%; }
+.phone { width: 390px; max-width: 100%; aspect-ratio: 390 / 844; border: 1px solid var(--border); border-radius: 18px; overflow: hidden; background: #000; }
+.phone iframe { width: 100%; height: 100%; border: 0; }
+/* nhật ký thao tác */
+#log { position: sticky; bottom: 0; background: var(--surface); border-top: 1px solid var(--border); max-height: 34vh; overflow: auto; }
+#log summary { padding: 8px 16px; cursor: pointer; color: var(--text-2); font-size: 12px; }
+#log ol { margin: 0; padding: 0 16px 10px 36px; font-size: 12px; }
+#log li { margin: 2px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Arcade Studio</h1>
+  <select id="pick" aria-label="Chọn game"></select>
+  <span id="status"></span>
+  <nav role="tablist" id="tabs"></nav>
+</header>
+<main id="main"><div class="card">Đang tải…</div></main>
+<details id="log"><summary>Nhật ký thao tác — mỗi nút ở trên là một action; agent gọi đúng tên đó qua MCP (tool <code>arcade</code>)</summary><ol id="logs"></ol></details>
+
+<script type="module">
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtBytes = (n) => n == null ? '—' : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(2)} MB`;
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+// ── mọi thao tác đi qua đây: cùng sổ đăng ký với MCP ─────────────────────────
+async function call(action, args) {
+  const t0 = performance.now();
+  const r = await fetch('/api/call', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, args }) }).then((x) => x.json());
+  const li = document.createElement('li');
+  const ms = Math.round(performance.now() - t0);
+  li.innerHTML = `<span class="${r.error ? 'st-bad' : 'st-good'}">${r.error ? '✗' : '✓'}</span> <code>arcade call ${esc(action)} '${esc(JSON.stringify(args))}'</code> · MCP <code>${esc(action.replace(/\./g, '_'))}</code> · ${ms}ms${r.error ? ` — <span class="err">${esc(r.error)}</span>` : ''}`;
+  $('#logs').prepend(li);
+  if (r.error) throw new Error(r.error);
+  return r.result;
+}
+
+const TABS = [['scenario', 'Kịch bản'], ['gameplay', 'Gameplay'], ['assets', 'Resource'], ['contract', 'Hợp đồng'], ['play', 'Chơi thử']];
+const state = { ctx: null, games: [], dir: null, tab: new URLSearchParams(location.hash.slice(1)).get('tab') || 'scenario' };
+
+function renderTabs() {
+  $('#tabs').innerHTML = TABS.map(([id, label]) => `<button role="tab" data-tab="${id}" aria-selected="${state.tab === id}">${label}</button>`).join('');
+}
+$('#tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-tab]');
+  if (!b) return;
+  state.tab = b.dataset.tab;
+  history.replaceState(null, '', `#tab=${state.tab}&dir=${encodeURIComponent(state.dir ?? '')}`);
+  renderTabs();
+  show();
+});
+$('#pick').addEventListener('change', (e) => { state.dir = e.target.value; show(); });
+
+async function boot() {
+  state.ctx = await fetch('/api/context').then((r) => r.json());
+  const list = await call('games.list', { root: state.ctx.root });
+  state.games = list.games;
+  const fromHash = new URLSearchParams(location.hash.slice(1)).get('dir');
+  state.dir = fromHash || state.ctx.game || state.games[0]?.dir || null;
+  $('#pick').innerHTML = state.games.map((g) => `<option value="${esc(g.dir)}" ${g.dir === state.dir ? 'selected' : ''}>${g.ok ? '✓' : '✗'} ${esc(g.id)}</option>`).join('');
+  renderTabs();
+  show();
+}
+
+async function show() {
+  const main = $('#main');
+  if (!state.dir) { main.innerHTML = `<div class="card">Không có game nào trong <code>${esc(state.ctx.root)}</code>.</div>`; return; }
+  const g = state.games.find((x) => x.dir === state.dir);
+  $('#status').innerHTML = g ? `<span class="badge ${g.ok ? 'st-good' : 'st-bad'}">${g.ok ? '✓ hợp đồng đạt' : `✗ ${g.errors} lỗi hợp đồng`}</span> <span class="badge">${esc(g.mode ?? '?')}</span>` : '';
+  main.innerHTML = '<div class="card">Đang tải…</div>';
+  try { await VIEWS[state.tab](main, state.dir); }
+  catch (e) { main.innerHTML = `<div class="card"><h2>Không đọc được</h2><p class="err">${esc(e.message)}</p></div>`; }
+}
+
+// ── Kịch bản ─────────────────────────────────────────────────────────────────
+async function scenario(main, dir) {
+  const { spec, problems } = await call('spec.get', { dir });
+  const known = new Set(['$schema', 'id', 'title', 'genre', 'loop', 'mode', 'maxPlayers', 'controls', 'winCondition', 'loseCondition', 'template', 'balance', 'entities', 'rules', 'artDirection', 'features', 'acceptance']);
+  const extra = Object.keys(spec).filter((k) => !known.has(k));
+  const list = (a) => Array.isArray(a) && a.length ? `<ol>${a.map((x) => `<li>${esc(x)}</li>`).join('')}</ol>` : '<p class="sub">—</p>';
+  main.innerHTML = `
+    <div class="card">
+      <h2>${esc(spec.title ?? spec.id)} <span class="sub">· ${esc(spec.genre ?? '?')} · ${esc(spec.mode ?? '?')} · ${esc(spec.maxPlayers ?? '?')} người · template ${esc(spec.template ?? '?')}</span></h2>
+      <p class="sub">Vòng chơi</p><p class="lead">${esc(spec.loop ?? '—')}</p>
+      ${problems.length ? `<p class="sub" style="margin-top:12px">${problems.filter((p) => p.level === 'error').length} lỗi spec — xem tab Hợp đồng</p>` : ''}
+    </div>
+    <div class="grid2">
+      <div class="card"><h2>Thắng khi</h2><p>${esc(spec.winCondition ?? '—')}</p><h2>Thua khi</h2><p>${esc(spec.loseCondition ?? '—')}</p></div>
+      <div class="card"><h2>Điều khiển</h2><table><tr><th>Mobile</th><td>${esc(spec.controls?.mobile ?? '—')}</td></tr><tr><th>Desktop</th><td>${esc(spec.controls?.desktop ?? '—')}</td></tr></table>
+        ${spec.artDirection ? `<h2 style="margin-top:12px">Hình ảnh</h2><p>${esc(spec.artDirection)}</p>` : ''}</div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h2>Luật</h2>${list(spec.rules)}${spec.features ? `<h2>Tính năng</h2>${list(spec.features)}` : ''}</div>
+      <div class="card"><h2>Đối tượng</h2>${Array.isArray(spec.entities) && spec.entities.length ? `<table><tr><th>Tên</th><th>Thuộc tính</th></tr>${spec.entities.map((e) => `<tr><td>${esc(e.name)}</td><td>${(e.props ?? []).map((p) => `<code>${esc(p)}</code>`).join(' ')}</td></tr>`).join('')}</table>` : '<p class="sub">—</p>'}</div>
+    </div>
+    <div class="card"><h2>Ràng buộc cân bằng (spec)</h2><p class="sub">Sai một dòng ở đây thì game không chơi được — tab Gameplay kiểm chúng trên số thật.</p>
+      <div class="scroll"><table><tr><th>Tham số</th><th>Ràng buộc</th><th>Vì sao</th></tr>
+      ${(Array.isArray(spec.balance) ? spec.balance : []).map((b) => `<tr><td><code>${esc(b.param)}</code></td><td class="mono">${esc(b.constraint)}</td><td>${esc(b.why)}</td></tr>`).join('')}</table></div></div>
+    ${extra.length ? `<div class="card"><h2>Khoá ngoài GameSpec v1</h2><p class="sub">Được giữ, nhưng playtest không đọc.</p><pre class="mono scroll">${esc(JSON.stringify(Object.fromEntries(extra.map((k) => [k, spec[k]])), null, 2))}</pre></div>` : ''}`;
+}
+
+// ── biểu đồ ──────────────────────────────────────────────────────────────────
+function niceTicks(min, max, n = 5) {
+  if (max === min) max = min + 1;
+  const step0 = (max - min) / n, mag = 10 ** Math.floor(Math.log10(step0));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= step0);
+  const out = [];
+  // vạch cuối PHỦ giá trị lớn nhất: dừng ở vạch ≤ max thì đường tràn ra ngoài khung.
+  const end = Math.ceil(max / step - 1e-9) * step;
+  for (let v = Math.floor(min / step) * step; v <= end + 1e-9; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+// Vẽ theo đúng pixel của khung chứa (không phóng viewBox): chữ trục luôn 11px dù thẻ rộng hay hẹp.
+const M = { l: 44, r: 12, t: 24, b: 34 };
+const size = (el, h) => ({ W: Math.max(300, Math.round(el.clientWidth || 560)), H: h });
+
+/** Đường đơn: một chuỗi nên không có hộp chú giải — tiêu đề gọi tên nó. Crosshair + tooltip. */
+function lineChart(el, { points, xLabel, unit }) {
+  const { W, H } = size(el, 220);
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  const yt = niceTicks(Math.min(0, ...ys), Math.max(...ys)), xt = niceTicks(Math.min(...xs), Math.max(...xs), 6);
+  const x0 = xt[0], x1 = xt.at(-1), y0 = yt[0], y1 = yt.at(-1);
+  const X = (v) => M.l + ((v - x0) / (x1 - x0)) * (W - M.l - M.r), Y = (v) => H - M.b - ((v - y0) / (y1 - y0)) * (H - M.t - M.b);
+  const d = points.map((p, i) => `${i ? 'L' : 'M'}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('');
+  el.classList.add('chart');
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="biểu đồ đường">
+    <g class="axis">${yt.map((v) => `<line class="gridline" x1="${M.l}" x2="${W - M.r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${M.l - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`).join('')}
+    ${xt.map((v) => `<text x="${X(v)}" y="${H - M.b + 16}" text-anchor="middle">${v}</text>`).join('')}
+    <text x="${(M.l + W - M.r) / 2}" y="${H - 2}" text-anchor="middle">${esc(xLabel)}</text>
+    <text x="${M.l}" y="${M.t - 12}" text-anchor="start">${esc(unit)}</text></g>
+    <line class="baseline" x1="${M.l}" x2="${W - M.r}" y1="${Y(y0)}" y2="${Y(y0)}"/>
+    <path d="${d}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <line class="xh" y1="${M.t}" y2="${H - M.b}" stroke="var(--text-2)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>
+    <circle class="dot" r="4" fill="var(--series-1)" stroke="var(--surface)" stroke-width="2" visibility="hidden"/>
+    <rect x="${M.l}" y="${M.t}" width="${W - M.l - M.r}" height="${H - M.t - M.b}" fill="transparent"/></svg><div class="tip" hidden></div>`;
+  const svg = $('svg', el), tip = $('.tip', el), xh = $('.xh', el), dot = $('.dot', el);
+  svg.addEventListener('pointermove', (e) => {
+    const r = svg.getBoundingClientRect(), vx = ((e.clientX - r.left) / r.width) * W;
+    let best = points[0];
+    for (const p of points) if (Math.abs(X(p[0]) - vx) < Math.abs(X(best[0]) - vx)) best = p;
+    const px = X(best[0]), py = Y(best[1]);
+    xh.setAttribute('x1', px); xh.setAttribute('x2', px); xh.setAttribute('visibility', 'visible');
+    dot.setAttribute('cx', px); dot.setAttribute('cy', py); dot.setAttribute('visibility', 'visible');
+    tip.hidden = false; tip.style.left = `${(px / W) * r.width}px`; tip.style.top = `${(py / H) * r.height}px`;
+    tip.innerHTML = `${esc(xLabel)} <b>${best[0]}</b><br>${best[1]} ${esc(unit)}`;
+  });
+  svg.addEventListener('pointerleave', () => { tip.hidden = true; xh.setAttribute('visibility', 'hidden'); dot.setAttribute('visibility', 'hidden'); });
+}
+
+/** Mỗi seed một cột (thời gian ván). Thắng/thua là trạng thái: màu status + ký hiệu ✓/✗ trong chú giải và tooltip. */
+function runsChart(el, runs, onPick) {
+  const { W, H } = size(el, 240);
+  const ymax = Math.max(...runs.map((r) => r.seconds));
+  const yt = niceTicks(0, ymax);
+  const y1 = yt.at(-1), bw = (W - M.l - M.r) / runs.length;
+  const Y = (v) => H - M.b - (v / y1) * (H - M.t - M.b);
+  el.classList.add('chart');
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="thời gian mỗi ván bot">
+    <g class="axis">${yt.map((v) => `<line class="gridline" x1="${M.l}" x2="${W - M.r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${M.l - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`).join('')}
+    <text x="${(M.l + W - M.r) / 2}" y="${H - 2}" text-anchor="middle">seed (bấm một cột để phát lại)</text><text x="${M.l}" y="${M.t - 12}" text-anchor="start">giây</text></g>
+    ${runs.map((r, i) => {
+      const x = M.l + i * bw + 1, w = Math.max(bw - 2, 2), y = Y(r.seconds), h = Math.max(H - M.b - y, 2);
+      return `<g data-i="${i}" style="cursor:pointer"><rect x="${M.l + i * bw}" y="${M.t}" width="${bw}" height="${H - M.t - M.b}" fill="transparent"/>
+        <path d="M${x},${H - M.b}V${y + 4}q0,-4 4,-4h${w - 8}q4,0 4,4V${H - M.b}z" fill="${r.won ? 'var(--good)' : 'var(--critical)'}"/>
+        ${runs.length <= 30 ? `<text x="${x + w / 2}" y="${H - M.b + 14}" text-anchor="middle" style="fill:var(--muted);font-size:10px">${r.seed}</text>` : ''}</g>`;
+    }).join('')}
+    <line class="baseline" x1="${M.l}" x2="${W - M.r}" y1="${H - M.b}" y2="${H - M.b}"/></svg>
+    <div class="legend"><span><i style="background:var(--good)"></i>✓ thắng</span><span><i style="background:var(--critical)"></i>✗ thua</span></div><div class="tip" hidden></div>`;
+  const tip = $('.tip', el), svg = $('svg', el);
+  svg.querySelectorAll('g[data-i]').forEach((g) => {
+    const r = runs[+g.dataset.i];
+    g.addEventListener('pointerenter', () => {
+      const b = svg.getBoundingClientRect(), i = +g.dataset.i;
+      tip.hidden = false; tip.style.left = `${((M.l + (i + 0.5) * bw) / W) * b.width}px`; tip.style.top = `${(Y(r.seconds) / H) * b.height}px`;
+      tip.innerHTML = `seed <b>${r.seed}</b> · ${r.won ? '<span class="st-good">✓ thắng</span>' : '<span class="st-bad">✗ thua</span>'}<br>${r.seconds}s · điểm ${r.score}`;
+    });
+    g.addEventListener('pointerleave', () => { tip.hidden = true; });
+    g.addEventListener('click', () => onPick(r.seed));
+  });
+}
+
+// ── phát lại ─────────────────────────────────────────────────────────────────
+let replayTimer = 0;
+async function replay(el, dir, seed) {
+  cancelAnimationFrame(replayTimer);
+  el.innerHTML = '<p class="sub">Đang mô phỏng…</p>';
+  const r = await call('bot.replay', { dir, seed, every: 0.05 });
+  el.innerHTML = `<div class="replay"><canvas width="280" height="${Math.round(280 * r.world.h / r.world.w)}"></canvas>
+    <div><p><b>seed ${r.seed}</b> · ${r.won ? '<span class="st-good">✓ bot thắng</span>' : '<span class="st-bad">✗ bot thua</span>'} sau ${r.seconds}s · ${r.frames.length} khung</p>
+      <div class="row"><button class="act" data-a="play">⏸ Dừng</button><button class="act" data-a="last">Tới cuối ván</button><label>tốc độ <select data-a="speed"><option>0.5</option><option selected>1</option><option>2</option><option>4</option></select>×</label></div>
+      <input type="range" min="0" max="${r.frames.length - 1}" value="0" aria-label="khung hình" />
+      <div class="hud mono"></div></div></div>`;
+  const cv = $('canvas', el), ctx = cv.getContext('2d'), range = $('input[type=range]', el), hud = $('.hud', el);
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  cv.width *= dpr; cv.height *= dpr;
+  const u = cv.width / r.world.w;
+  let i = 0, playing = true, speed = 1, acc = 0, last = performance.now();
+  const draw = () => {
+    const f = r.frames[i];
+    ctx.fillStyle = '#0b1020'; ctx.fillRect(0, 0, cv.width, cv.height);
+    for (const s of f.shapes) {
+      ctx.fillStyle = s.color;
+      if (s.kind === 'rect') ctx.fillRect(s.x * u, s.y * u, (s.w ?? 1) * u, (s.h ?? 1) * u);
+      else { ctx.beginPath(); ctx.arc(s.x * u, s.y * u, (s.r ?? 0.5) * u, 0, Math.PI * 2); ctx.fill(); }
+      if (s.label) { ctx.fillStyle = '#e8ecff'; ctx.font = `${11 * dpr}px system-ui`; ctx.textAlign = 'center'; ctx.fillText(s.label, (s.x + (s.w ?? 0) / 2) * u, s.y * u - 4 * dpr); }
+    }
+    range.value = i;
+    hud.innerHTML = `t = ${f.t.toFixed(2)}s · ` + Object.entries(f.hud ?? {}).map(([k, v]) => `${esc(k)}: <b>${esc(v)}</b>`).join(' · ');
+  };
+  const frameDt = r.frames.length > 1 ? r.frames[1].t - r.frames[0].t : 0.05;
+  const loop = (now) => {
+    acc += ((now - last) / 1000) * speed; last = now;
+    if (playing) { while (acc >= frameDt) { acc -= frameDt; if (i < r.frames.length - 1) i++; else playing = false; } draw(); }
+    else acc = 0;
+    $('[data-a=play]', el).textContent = playing ? '⏸ Dừng' : '▶ Chạy';
+    replayTimer = requestAnimationFrame(loop);
+  };
+  range.addEventListener('input', () => { i = +range.value; playing = false; draw(); });
+  $('[data-a=play]', el).addEventListener('click', () => { if (i >= r.frames.length - 1) i = 0; playing = !playing; });
+  $('[data-a=last]', el).addEventListener('click', () => { i = r.frames.length - 1; playing = false; draw(); });
+  $('[data-a=speed]', el).addEventListener('change', (e) => { speed = +e.target.value; });
+  draw();
+  replayTimer = requestAnimationFrame(loop);
+}
+
+// ── Gameplay ─────────────────────────────────────────────────────────────────
+async function gameplay(main, dir) {
+  main.innerHTML = `
+    <div class="grid2"><div class="card" id="bal"></div><div class="card" id="cfg"></div></div>
+    <div class="grid2" id="curves"></div>
+    <div class="card"><div class="row" style="justify-content:space-between"><div><h2>Bot chơi thử</h2><p class="sub">Cùng bot test G3 chấm. Mỗi seed một ván tất định.</p></div>
+      <div class="row"><label>số ván <input type="number" id="nseed" value="20" min="1" max="200" style="width:64px"></label><button class="act primary" id="runbot">Chạy</button></div></div>
+      <div id="bot"></div></div>
+    <div class="card"><h2>Phát lại một ván</h2><p class="sub">Hình khối do src/studio.ts của game vẽ — đủ để thấy bot làm gì và chết ở đâu.</p>
+      <div class="row"><label>seed <input type="number" id="rseed" value="1" min="1"></label><button class="act" id="runreplay">Phát</button></div><div id="replay" style="margin-top:12px"></div></div>`;
+  const bal = await call('balance.check', { dir });
+  $('#bal', main).innerHTML = `<h2>Ràng buộc cân bằng</h2><p class="sub">${bal.ok ? '<span class="st-good">✓ tất cả đạt</span>' : '<span class="st-bad">✗ có ràng buộc hỏng — game có thể không chơi được</span>'} · kiểm trên số thật trong config.ts</p>
+    <div class="scroll"><table><tr><th>Tham số</th><th>Trạng thái</th><th>Vì sao</th><th>Trong spec</th></tr>
+    ${bal.balance.map((b) => `<tr><td><code>${esc(b.param)}</code></td><td class="${b.ok ? 'st-good' : 'st-bad'}">${b.ok ? '✓ đạt' : '✗ hỏng'}</td><td>${esc(b.why)}</td><td>${b.inSpec ? '✓' : '<span class="st-warn">! chưa ghi</span>'}</td></tr>`).join('')}</table></div>
+    ${bal.specOnly.length ? `<p class="sub">Spec có mà code không kiểm: ${bal.specOnly.map((p) => `<code>${esc(p)}</code>`).join(' ')}</p>` : ''}`;
+  $('#cfg', main).innerHTML = `<h2>Số cân bằng</h2><p class="sub">Sửa → <code>config.set</code> ghi vào config.ts, rồi mọi thứ trên trang tính lại. Nhớ sửa spec.json cùng commit.</p>
+    <div class="scroll"><table><tr><th>Hằng số</th><th>Giá trị</th><th></th></tr>
+    ${Object.entries(bal.config).map(([k, v]) => `<tr><td><code>${esc(k)}</code></td><td><input type="number" step="any" data-k="${esc(k)}" value="${v}"></td><td><button class="act" data-set="${esc(k)}" disabled>Áp dụng</button></td></tr>`).join('')}</table></div><p class="err" id="cfgerr"></p>`;
+  $('#cfg', main).addEventListener('input', (e) => { const k = e.target.dataset.k; if (k) $(`[data-set="${k}"]`, main).disabled = +e.target.value === bal.config[k]; });
+  $('#cfg', main).addEventListener('click', async (e) => {
+    const k = e.target.dataset.set;
+    if (!k) return;
+    e.target.disabled = true;
+    try { await call('config.set', { dir, name: k, value: +$(`[data-k="${k}"]`, main).value }); show(); }
+    catch (err) { $('#cfgerr', main).textContent = err.message; }
+  });
+  const { curves } = await call('curves.get', { dir });
+  $('#curves', main).innerHTML = curves.map((c, i) => `<div class="card"><h2>${esc(c.label)}</h2><p class="sub">${esc(c.unit)} theo ${esc(c.xLabel)}</p><div data-c="${i}"></div></div>`).join('') || '<div class="card"><p class="sub">Game chưa khai đường cong nào (studio.curves).</p></div>';
+  curves.forEach((c, i) => lineChart($(`[data-c="${i}"]`, main), c));
+  const runBot = async () => {
+    const el = $('#bot', main);
+    el.innerHTML = '<p class="sub">Đang chơi…</p>';
+    const s = await call('bot.simulate', { dir, seeds: +$('#nseed', main).value || 20 });
+    const secs = s.runs.map((r) => r.seconds).sort((a, b) => a - b);
+    el.innerHTML = `<div class="tiles"><div class="tile"><div class="k">Tỉ lệ bot thắng</div><div class="v">${Math.round(s.winRate * 100)}%</div><div class="d">${s.won}/${s.total} ván</div></div>
+      <div class="tile"><div class="k">Thời gian ván (trung vị)</div><div class="v">${secs[Math.floor(secs.length / 2)]}s</div><div class="d">ngắn nhất ${secs[0]}s · dài nhất ${secs.at(-1)}s</div></div>
+      <div class="tile"><div class="k">Thời gian mô phỏng</div><div class="v">${s.ms}ms</div><div class="d">trên máy này</div></div></div><div id="runs" style="margin-top:12px"></div>`;
+    runsChart($('#runs', el), s.runs, (seed) => { $('#rseed', main).value = seed; replay($('#replay', main), dir, seed); $('#replay', main).scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+  };
+  $('#runbot', main).addEventListener('click', runBot);
+  $('#runreplay', main).addEventListener('click', () => replay($('#replay', main), dir, +$('#rseed', main).value || 1));
+  await runBot();
+}
+
+// ── Resource ─────────────────────────────────────────────────────────────────
+async function assets(main, dir) {
+  const a = await call('assets.list', { dir });
+  const pct = a.bundle.percent;
+  main.innerHTML = `
+    <div class="card"><h2>Resource</h2><p class="sub">Ảnh, âm thanh, font, dữ liệu trong repo game (bỏ qua node_modules, dist, docs, tests).</p>
+      <div class="tiles">
+        <div class="tile"><div class="k">Số file</div><div class="v">${a.assets.length}</div><div class="d">${Object.entries(a.byKind).map(([k, v]) => `${esc(k)} ${v.count}`).join(' · ') || 'game vẽ bằng code'}</div></div>
+        <div class="tile"><div class="k">Tổng dung lượng</div><div class="v">${fmtBytes(a.totalBytes)}</div><div class="d">nguồn, trước build</div></div>
+        <div class="tile"><div class="k">Bản build / ngân sách</div><div class="v">${pct == null ? '—' : pct + '%'}</div><div class="d">${fmtBytes(a.bundle.builtBytes)} / ${fmtBytes(a.bundle.budgetBytes)}${a.bundle.builtBytes == null ? ' · chưa build' : ''}</div></div>
+        <div class="tile"><div class="k">Không thấy dùng</div><div class="v">${a.unreferenced.length}</div><div class="d">xem lại trước khi xoá</div></div>
+      </div>
+      ${pct != null ? `<div class="meter" style="margin-top:12px" role="meter" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="bundle so với ngân sách"><i style="width:${Math.min(pct, 100)}%;${pct > 90 ? 'background:var(--critical)' : ''}"></i></div>` : ''}
+    </div>
+    <div class="card"><div class="scroll"><table><tr><th>File</th><th>Loại</th><th style="text-align:right">Dung lượng</th><th>Dùng</th></tr>
+      ${a.assets.map((x) => `<tr><td class="mono">${esc(x.path)}</td><td>${esc(x.kind)}</td><td style="text-align:right" class="mono">${fmtBytes(x.bytes)}</td><td>${x.referenced ? '✓' : '<span class="st-warn">! không thấy tên trong code</span>'}</td></tr>`).join('') || '<tr><td colspan="4" class="sub">Không có resource — game vẽ hoàn toàn bằng code.</td></tr>'}
+    </table></div></div>`;
+}
+
+// ── Hợp đồng ─────────────────────────────────────────────────────────────────
+async function contract(main, dir) {
+  const v = await call('spec.validate', { dir });
+  let manifest = null, merr = '';
+  try { manifest = await call('manifest.get', { dir }); } catch (e) { merr = e.message; }
+  main.innerHTML = `
+    <div class="card"><h2>${v.ok ? '<span class="st-good">✓ Hợp đồng đạt</span>' : '<span class="st-bad">✗ Hợp đồng chưa đạt</span>'}</h2>
+      <p class="sub">arcade.toml + spec.json, từng file và chéo nhau — cổng G1 tĩnh. Cùng kết quả với <code>arcade spec validate</code>.</p>
+      ${v.problems.length ? `<div class="scroll"><table><tr><th></th><th>Ở đâu</th><th>Vấn đề</th></tr>${v.problems.map((p) => `<tr><td class="${p.level === 'error' ? 'st-bad' : 'st-warn'}">${p.level === 'error' ? '✗ lỗi' : '! cảnh báo'}</td><td class="mono">${esc(p.where)}</td><td>${esc(p.message)}</td></tr>`).join('')}</table></div>` : '<p>Không có vấn đề nào.</p>'}</div>
+    <div class="card"><h2>Manifest platform lưu</h2><p class="sub">Sinh từ arcade.toml — thứ bảng games trong DB phải chứa.</p>
+      ${manifest ? `<pre class="mono scroll">${esc(JSON.stringify(manifest, null, 2))}</pre>` : `<p class="err">${esc(merr)}</p>`}</div>`;
+}
+
+// ── Chơi thử ─────────────────────────────────────────────────────────────────
+async function play(main, dir) {
+  const src = `/play/${encodeURIComponent(dir)}/`;
+  main.innerHTML = `<div class="card"><h2>Chơi thử bản build</h2><p class="sub">Khung điện thoại 390×844, phục vụ từ client_dir đã build (chạy <code>npm run build</code> trong game nếu trống). Platform không có ở đây nên game chạy chế độ local. Agent điều khiển qua <code>window.__game</code> (state, start, setInput).</p>
+    <div class="phone"><iframe src="${src}" title="game"></iframe></div></div>`;
+}
+
+const VIEWS = { scenario, gameplay, assets, contract, play };
+boot().catch((e) => { $('#main').innerHTML = `<div class="card"><p class="err">${esc(e.message)}</p></div>`; });
+</script>
+</body>
+</html>

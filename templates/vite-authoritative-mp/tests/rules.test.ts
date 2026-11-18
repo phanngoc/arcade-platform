@@ -66,3 +66,13 @@ describe('G3 — chơi được', () => {
     expect(s.players.a!.score + s.players.b!.score).toBe(0);
   });
 });
+
+describe('studio', () => {
+  it('ván bot kết thúc có người thắng, replay có khung hình', async () => {
+    const { studio } = await import('../src/studio');
+    const r = studio.simulate(5, { record: 1 });
+    expect(r.won).toBe(true);
+    expect(r.frames!.length).toBeGreaterThan(3);
+    expect(studio.config.TICK_RATE).toBe(C.TICK_RATE);
+  });
+});
