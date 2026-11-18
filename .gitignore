@@ -9,26 +9,32 @@ node_modules/
 # Mỗi game có repo riêng — không nhúng vào đây để tránh embedded-repo
 # và giữ được remote/history của từng game.
 #   tank-battle -> github.com/phanngoc/tank-battle-90
-#   castle      -> repo riêng
-#   rumba       -> repo riêng
-#   blockdrop   -> repo riêng (chưa đẩy lên remote)
+#   castle      -> github.com/phanngoc/castle-busters
+#   rumba       -> github.com/phanngoc/rumba-puzzle
+#   blockdrop   -> github.com/phanngoc/block-drop
+#   queens      -> github.com/phanngoc/queens-puzzle
 /tank-battle/
 /castle/
 /rumba/
 /blockdrop/
+/queens
 
 # Batch arcade-2026-09-07: symlink tới repo riêng ở ../arcade-2026-09-07/,
 # platform phục vụ qua /g/<id>/. Không nhúng vào repo này (embedded-repo).
-/neon-lane-runner/
-/ruins-dash/
-/tiny-road-hopper/
-/rocket-workshop/
-/slice-orchard/
-/pulse-cube/
-/prism-tower/
-/spiral-drop/
-/maze-spark/
-/cloudbound-hop/
+# Không có dấu / ở cuối: mẫu `/x/` chỉ khớp thư mục, KHÔNG khớp symlink.
+/neon-lane-runner
+/ruins-dash
+/tiny-road-hopper
+/rocket-workshop
+/slice-orchard
+/pulse-cube
+/prism-tower
+/spiral-drop
+/maze-spark
+/cloudbound-hop
+
+# Bản dump DB trước migration (ops/backups) — dữ liệu, không phải mã
+/ops/backups/
 
 # implement
 node_modules/
