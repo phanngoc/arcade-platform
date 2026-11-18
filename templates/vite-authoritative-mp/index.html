@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1020" />
+    <title>__GAME_NAME__</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230b1020'/%3E%3Ccircle cx='11' cy='20' r='5' fill='%237dfcd0'/%3E%3Ccircle cx='22' cy='11' r='4' fill='%23ffd166'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="stage">
+      <canvas id="scene" aria-label="Sân chơi — kéo để di chuyển"></canvas>
+      <header id="hud">
+        <div id="scores"></div>
+        <button id="code" type="button" style="pointer-events:auto;min-height:32px;min-width:0;padding:0 10px;font-size:13px"></button>
+      </header>
+      <div id="overlay">
+        <h1>__GAME_NAME__</h1>
+        <p id="sub">Nhặt xu trước đối thủ. Ai đủ 10 xu trước thì thắng.</p>
+        <button id="create" type="button">Tạo phòng</button>
+        <input id="join-code" placeholder="Mã phòng" maxlength="6" autocomplete="off"
+          style="min-height:48px;width:160px;text-align:center;font:inherit;text-transform:uppercase;border-radius:12px;border:0" />
+        <button id="join" type="button">Vào phòng</button>
+        <button id="local" type="button">Chơi thử với bot</button>
+      </div>
+    </div>
+    <script>window.ARCADE_GAME_ID = '__GAME_ID__';</script>
+    <script src="vendor/arcade.js"></script>
+    <script src="arcade-bridge.js"></script>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

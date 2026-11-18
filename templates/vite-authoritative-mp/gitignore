@@ -1,0 +1,6 @@
+node_modules/
+dist/
+# build từ server/room.ts (npm run build:room) — platform chạy bản build
+server/room.js
+*.log
+.DS_Store
