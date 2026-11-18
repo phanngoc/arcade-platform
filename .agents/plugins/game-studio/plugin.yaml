@@ -3,3 +3,11 @@ name: game-studio
 version: 1.0.0
 description: Làm game trình duyệt từ prompt — spec, build, playtest, iterate, ship — với bài học từ các game arcade.
 provides: [game-studio]
+# Mọi thao tác của platform là một tool (sổ đăng ký packages/studio): spec_validate,
+# spec_get, manifest_get, games_list, assets_list, game_new… — cùng danh sách với
+# `arcade actions` và các nút của Studio. Plugin của repo: cần
+# `bomclaw plugins trust game-studio` thì bin/ và MCP mới bật.
+mcp:
+  arcade:
+    command: ${plugin_dir}/bin/arcade
+    args: [mcp]

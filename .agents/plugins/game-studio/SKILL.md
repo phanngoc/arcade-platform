@@ -20,6 +20,13 @@ castle, rumba, blockdrop), không phải lý thuyết.
 Hai vòng lặp: **fix** (playtest ⇄ iterate, tối đa 3 vòng rồi trả về cho người) và
 **cải tiến** (người chơi → iterate → playtest → ship).
 
+## Công cụ: mọi thao tác là một tool
+
+Plugin khai MCP server `arcade` (khi đã `bomclaw plugins trust game-studio`): **dùng tool, đừng tự đọc/đoán
+file** khi có tool làm việc đó — `spec_validate`, `spec_get`, `manifest_get`, `games_list`, `assets_list`,
+`game_new`. Cùng lệnh trong shell: `arcade actions`, `arcade call <action> '<json>'` (bin/ của plugin nằm
+trong PATH). Trong trình duyệt, game điều khiển qua `window.__game` (`state`, `start`, `setInput`).
+
 ## Vào bước nào
 
 - "Làm game …", "clone game …" → bắt đầu từ **Spec**. Không nhảy thẳng vào code.
