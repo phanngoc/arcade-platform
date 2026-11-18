@@ -153,3 +153,33 @@ test('arcade studio: trang + /api/call đi qua cùng sổ đăng ký; /play ch�
     s.close()
   }
 })
+
+test('art: blender.status trả lời có/không; sprites.render từ chối đầu vào sai trước khi gọi Blender', async () => {
+  const st = (await callAction('blender.status', {})) as { available: boolean; samples: string[] }
+  assert.equal(typeof st.available, 'boolean')
+  assert.ok(st.samples.some((s) => s.endsWith('hero.py')))
+  const root = mkdtempSync(join(tmpdir(), 'art-'))
+  scaffold({ id: 'art-game', parent: root, skipSdk: true })
+  const dir = join(root, 'art-game')
+  await assert.rejects(callAction('sprites.render', { dir, model: 'nope.py', name: 'x' }), /không có mô hình/)
+  writeFileSync(join(dir, 'm.txt'), '')
+  await assert.rejects(callAction('sprites.render', { dir, model: 'm.txt', name: 'x' }), /\.py\/\.blend/)
+  await assert.rejects(callAction('sprites.render', { dir, model: 'm.txt', name: 'Bad Name' }), /kebab-case/)
+  await assert.rejects(callAction('sprites.render', { dir, model: 'm.txt', name: 'x', camera: 'fisheye' }), /một trong/)
+})
+
+// Chạy Blender thật (~5s) — chỉ khi máy có Blender; CI không có thì bỏ qua, có lý do.
+test('art: sprites.render ra sheet + atlas có điểm neo', async (t) => {
+  const st = (await callAction('blender.status', {})) as { available: boolean; samples: string[] }
+  if (!st.available) return t.skip('không có Blender trên máy này')
+  const root = mkdtempSync(join(tmpdir(), 'art-r-'))
+  scaffold({ id: 'art-r', parent: root, skipSdk: true })
+  const dir = join(root, 'art-r')
+  const crate = st.samples.find((s) => s.endsWith('crate.py'))!
+  const r = (await callAction('sprites.render', { dir, model: crate, name: 'crate', size: 32, directions: 4, frames: [1, 24, 12], engine: 'workbench' })) as {
+    image: string; frames: number; directions: number; anchor: [number, number]; frameW: number
+  }
+  assert.equal(r.image, 'public/sprites/crate.png')
+  assert.deepEqual([r.frames, r.directions, r.frameW], [2, 4, 32])
+  assert.ok(r.anchor[1] > 16 && r.anchor[1] <= 32, `chân phải ở nửa dưới khung: ${r.anchor}`)
+})

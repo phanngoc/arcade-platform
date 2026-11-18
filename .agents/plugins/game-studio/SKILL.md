@@ -1,6 +1,6 @@
 ---
 name: game-studio
-description: 'Make or fix an arcade browser game: spec → build → playtest → iterate → ship. Use when asked to make, clone, tune or ship a game. NOT for: non-game apps.'
+description: 'Make or fix an arcade browser game (2D or 2.5D/isometric): spec → build (art, Blender sprites) → playtest → iterate → ship. Use when asked to make, clone, tune, beautify or ship a game. NOT for: non-game apps.'
 ---
 
 # game-studio — prompt thành game chơi được
@@ -28,6 +28,17 @@ file** khi có tool làm việc đó — `spec_validate`, `spec_get`, `manifest_
 `config_set` (sửa một số cân bằng rồi kiểm lại — dùng ở bước iterate thay vì sửa tay).
 Developer review cùng những thứ đó ở `arcade studio <thư-mục-game>` (trang local): mỗi nút là một action. Cùng lệnh trong shell: `arcade actions`, `arcade call <action> '<json>'` (bin/ của plugin nằm
 trong PATH). Trong trình duyệt, game điều khiển qua `window.__game` (`state`, `start`, `setInput`).
+
+## Art: game phải bắt mắt
+
+Ở bước Build (và Iterate khi người chơi chê "xấu", "nhạt"), đọc `art/` theo thứ tự:
+`art/direction.md` (chốt phong cách, ghi `art.json`) → `art/palette.md` → `art/sprites.md` hoặc
+`art/25d.md` (mô hình 3D trong Blender → sprite isometric) → `art/maps.md` → `art/animation.md` →
+`art/juice.md`. Dùng asset có sẵn: `art/assets-licensing.md`. **Game chạy đúng mà trông như hình
+khối xám là chưa xong.**
+
+Tool art: `blender_status`, `sprites_render` (MCP `arcade`, Blender headless); MCP `blender` khi người
+đang mở Blender.
 
 ## Vào bước nào
 
