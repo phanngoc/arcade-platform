@@ -4,7 +4,8 @@ Không có cổng này thì "prompt ra game" chỉ là demo. Chạy tuần tự,
 Dùng `browse`/`gstack` hoặc Playwright MCP.
 
 ## G1 — Tĩnh
-- `spec.json` và `arcade.toml` hợp lệ; capability dùng trong code ⊆ capability khai báo.
+- `spec.json` và `arcade.toml` hợp lệ và khớp nhau: `arcade spec validate <dir>` phải thoát 0 (có `--json`).
+- Capability dùng trong code ⊆ capability khai báo.
 - Bundle trong hạn mức; không gọi domain ngoài allowlist; không `eval`.
 - Mọi ràng buộc trong `spec.balance` được kiểm bằng grep/assert trên hằng số thật.
   *(Đây là nơi bắt được lỗi kiểu `CANNON_DMG < BRICK_HP`.)*

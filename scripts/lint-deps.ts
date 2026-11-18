@@ -15,6 +15,8 @@ const RULES: { from: string; forbidden: string[] }[] = [
   { from: 'packages/core', forbidden: ['@arcade/services', '@arcade/roomd', '@arcade/app'] },
   { from: 'packages/protocol', forbidden: ['@arcade/core', '@arcade/services', '@arcade/roomd', '@arcade/app'] },
   { from: 'packages/sdk', forbidden: ['@arcade/core', '@arcade/services', '@arcade/roomd', '@arcade/app'] },
+  // gamekit chạy ở CI của từng game repo, không có DB/Redis: chỉ được là lá.
+  { from: 'packages/gamekit', forbidden: ['@arcade/core', '@arcade/services', '@arcade/roomd', '@arcade/app'] },
 ]
 
 function walk(dir: string): string[] {
