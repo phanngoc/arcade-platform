@@ -12,6 +12,12 @@
 5. **Commit từng patch riêng** với thông điệp nói rõ số cũ → số mới. Đây là thứ giúp rollback được khi
    một thay đổi "nghe hợp lý" làm game dở đi.
 
+## Công cụ
+
+`config_set` (sửa số, kiểm lại balance ngay) → `bot_simulate` (game còn thắng được không, khó hơn/dễ hơn
+bao nhiêu) → `bot_replay` một seed thua để xem chết vì đâu. Báo cho người dùng: số cũ → số mới, tỉ lệ
+thắng trước → sau.
+
 ## Ba loại yêu cầu và cách xử
 
 | Yêu cầu | Làm gì |

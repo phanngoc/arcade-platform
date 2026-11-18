@@ -22,6 +22,9 @@ plugin `game-studio` của repo arcade-platform — spec → build → playtest 
 5. **Không cấp phát trong vòng lặp render** (tái dùng object/array). DPR chặn ở 2 (`src/canvas.ts`).
 6. **Platform là bổ sung.** Mọi lời gọi platform qua `src/arcade.ts`, ngoài platform thì no-op.
 7. Capability dùng trong code phải khai trong `arcade.toml` (bảng xếp hạng: `[capabilities].leaderboard`).
+8. **`src/studio.ts` là cách game tự mô tả cho Studio** (`arcade studio .` ở repo platform): số cân bằng,
+   ràng buộc, đường cong độ khó, bot chơi thử, phát lại bằng hình khối. Test G3 chạy CHÍNH bot này —
+   thêm luật thì giữ `studio.simulate` đúng, thêm độ khó thì thêm một đường cong.
 
 ## Chưa xong khi
 

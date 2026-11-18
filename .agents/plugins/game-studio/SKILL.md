@@ -24,7 +24,9 @@ Hai vòng lặp: **fix** (playtest ⇄ iterate, tối đa 3 vòng rồi trả v�
 
 Plugin khai MCP server `arcade` (khi đã `bomclaw plugins trust game-studio`): **dùng tool, đừng tự đọc/đoán
 file** khi có tool làm việc đó — `spec_validate`, `spec_get`, `manifest_get`, `games_list`, `assets_list`,
-`game_new`. Cùng lệnh trong shell: `arcade actions`, `arcade call <action> '<json>'` (bin/ của plugin nằm
+`game_new`; gameplay: `balance_check`, `curves_get`, `bot_simulate` (tỉ lệ thắng theo seed), `bot_replay`,
+`config_set` (sửa một số cân bằng rồi kiểm lại — dùng ở bước iterate thay vì sửa tay).
+Developer review cùng những thứ đó ở `arcade studio <thư-mục-game>` (trang local): mỗi nút là một action. Cùng lệnh trong shell: `arcade actions`, `arcade call <action> '<json>'` (bin/ của plugin nằm
 trong PATH). Trong trình duyệt, game điều khiển qua `window.__game` (`state`, `start`, `setInput`).
 
 ## Vào bước nào
