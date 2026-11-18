@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { validateGame } from '@arcade/gamekit'
-import { scaffold } from '../src/new.ts'
+import { scaffold } from '../src/scaffold.ts'
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'arcade-new-'))
 

@@ -3,7 +3,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, copyFileSync } from 'node:fs'
 import { validateGame, formatCheck } from '@arcade/gamekit'
-import { scaffold, nextSteps, TEMPLATE_DIRS } from './new.ts'
+import { scaffold, nextSteps, TEMPLATE_DIRS, actions, callAction, serveMcp } from '@arcade/studio'
 
 const cmd = process.argv[2] ?? 'help'
 const rest = process.argv.slice(3)
@@ -55,7 +55,8 @@ switch (cmd) {
       'packages/protocol/test/patch.test.ts',
       'packages/protocol/test/roomcode.test.ts',
       'packages/gamekit/test/gamekit.test.ts',
-      'packages/cli/test/new.test.ts',
+      'packages/studio/test/scaffold.test.ts',
+      'packages/studio/test/studio.test.ts',
       'packages/core/test/redis-keys.test.ts',
       'packages/services/test/api.test.ts',
       'packages/services/test/hub.test.ts',
@@ -111,6 +112,26 @@ switch (cmd) {
     break
   }
 
+  case 'actions':
+    // Mọi thao tác của platform — cùng danh sách agent thấy qua `arcade mcp`.
+    for (const a of actions()) console.log(`${a.readOnly ? ' ' : '✎'} ${a.name.padEnd(16)} ${a.description}`)
+    break
+
+  case 'call': {
+    // arcade call <action> ['{"dir":"…"}'] — gọi thẳng một action, in JSON.
+    const [name, json] = rest
+    if (!name) { console.error('dùng: arcade call <action> [json-args]   (xem: arcade actions)'); process.exit(2) }
+    try {
+      console.log(JSON.stringify(await callAction(name, json ? JSON.parse(json) : {}), null, 2))
+    } catch (e) { console.error('✗ ' + (e as Error).message); process.exit(1) }
+    break
+  }
+
+  case 'mcp':
+    // MCP server qua stdio cho agent. Không in gì ra stdout ngoài JSON-RPC.
+    await serveMcp()
+    break
+
   case 'manifest': {
     // Thứ games.manifest trong DB phải chứa — sinh từ arcade.toml, không chép tay.
     const c = validateGame(rest[0] ?? '.')
@@ -129,6 +150,9 @@ switch (cmd) {
   arcade health   kiểm tra server có sống không
   arcade down     tắt Postgres + Redis
 
+  arcade actions                        mọi thao tác (✎ = có ghi); cùng danh sách agent thấy qua MCP
+  arcade call <action> [json]           gọi một thao tác, in JSON
+  arcade mcp                            MCP server (stdio) cho agent — plugin game-studio khai nó
   arcade new <id> [--template t] [--name n] [--dir d] [--spec f]  dựng game mới từ template (vite-offline | vite-authoritative-mp)
   arcade spec validate [dir…] [--json]  kiểm arcade.toml + spec.json của game (G1 tĩnh)
   arcade manifest [dir]                 in manifest (từ arcade.toml) mà platform lưu vào DB

@@ -1,0 +1,11 @@
+#!/bin/sh
+# `arcade` của platform, cho agent: plugin game-studio đưa bin/ vào PATH và khai
+# MCP server = `arcade mcp`. Tìm gốc repo theo vị trí THẬT của file này
+# (cd -P đi theo symlink): dự án như ch_arcade link plugin vào từ một checkout
+# khác, và `..` theo chữ trên đường dẫn qua symlink sẽ trỏ sai chỗ.
+set -e
+here=$(cd -P "$(dirname "$0")" && pwd)
+root=$(cd -P "$here/../../../.." && pwd)
+# Dịch vụ nền (launchd, dashboard) không nạp nvm: node có thể không có trong PATH.
+command -v node >/dev/null 2>&1 || { [ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh" >/dev/null; }
+exec node "$root/packages/cli/src/index.ts" "$@"

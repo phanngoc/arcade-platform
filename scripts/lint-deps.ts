@@ -17,6 +17,8 @@ const RULES: { from: string; forbidden: string[] }[] = [
   { from: 'packages/sdk', forbidden: ['@arcade/core', '@arcade/services', '@arcade/roomd', '@arcade/app'] },
   // gamekit chạy ở CI của từng game repo, không có DB/Redis: chỉ được là lá.
   { from: 'packages/gamekit', forbidden: ['@arcade/core', '@arcade/services', '@arcade/roomd', '@arcade/app'] },
+  // studio là công cụ dev (CLI/MCP/UI chạy trên máy dev, agent): không chạm DB/realtime.
+  { from: 'packages/studio', forbidden: ['@arcade/core', '@arcade/services', '@arcade/roomd', '@arcade/app'] },
 ]
 
 function walk(dir: string): string[] {

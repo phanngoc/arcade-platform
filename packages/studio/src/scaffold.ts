@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { ID_RE, parseSpec, FILL, type Mode } from '@arcade/gamekit'
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..') // packages/studio/src → gốc repo
 const TEMPLATES = join(ROOT, 'templates')
 
 export const TEMPLATE_DIRS: Record<string, { dir: string; mode: Mode; maxPlayers: number }> = {
