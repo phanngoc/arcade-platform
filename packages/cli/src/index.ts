@@ -3,6 +3,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, copyFileSync } from 'node:fs'
 import { validateGame, formatCheck } from '@arcade/gamekit'
+import { scaffold, nextSteps, TEMPLATE_DIRS } from './new.ts'
 
 const cmd = process.argv[2] ?? 'help'
 const rest = process.argv.slice(3)
@@ -54,6 +55,7 @@ switch (cmd) {
       'packages/protocol/test/patch.test.ts',
       'packages/protocol/test/roomcode.test.ts',
       'packages/gamekit/test/gamekit.test.ts',
+      'packages/cli/test/new.test.ts',
       'packages/core/test/redis-keys.test.ts',
       'packages/services/test/api.test.ts',
       'packages/services/test/hub.test.ts',
@@ -96,6 +98,19 @@ switch (cmd) {
     process.exit(checks.every((c) => c.ok) ? 0 : 1)
   }
 
+  case 'new': {
+    // arcade new <id> [--template vite-offline|vite-authoritative-mp] [--name "Tên"] [--dir cha] [--spec spec.json]
+    const flag = (k: string) => { const i = rest.indexOf(k); return i >= 0 ? rest[i + 1] : undefined }
+    const id = rest.find((a, i) => !a.startsWith('--') && !rest[i - 1]?.startsWith('--'))
+    if (!id) { console.error(`dùng: arcade new <id> [--template ${Object.keys(TEMPLATE_DIRS).join('|')}] [--name "Tên"] [--dir thư-mục-cha] [--spec spec.json]`); process.exit(2) }
+    try {
+      const r = scaffold({ id, template: flag('--template'), name: flag('--name'), parent: flag('--dir'), spec: flag('--spec') })
+      console.log(`template ${r.template}`)
+      console.log(nextSteps(r.dest, r.specFilled))
+    } catch (e) { console.error('✗ ' + (e as Error).message); process.exit(1) }
+    break
+  }
+
   case 'manifest': {
     // Thứ games.manifest trong DB phải chứa — sinh từ arcade.toml, không chép tay.
     const c = validateGame(rest[0] ?? '.')
@@ -114,6 +129,7 @@ switch (cmd) {
   arcade health   kiểm tra server có sống không
   arcade down     tắt Postgres + Redis
 
+  arcade new <id> [--template t] [--name n] [--dir d] [--spec f]  dựng game mới từ template (vite-offline | vite-authoritative-mp)
   arcade spec validate [dir…] [--json]  kiểm arcade.toml + spec.json của game (G1 tĩnh)
   arcade manifest [dir]                 in manifest (từ arcade.toml) mà platform lưu vào DB
 

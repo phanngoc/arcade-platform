@@ -12,7 +12,12 @@
 import { ID_RE, MODES, type Mode, type Problem } from './manifest.ts'
 
 export const GENRES = ['action-arcade', 'puzzle', 'turn-based', 'party'] as const
-export const TEMPLATES = ['canvas2d-offline', 'canvas2d-authoritative-mp', 'turn-based-mp', 'party-relay'] as const
+// vite-*: template thật trong templates/ (arcade new). Các tên canvas2d-*/… là của
+// spec cũ trước khi có template — vẫn nhận, nhưng `arcade new` không dựng được chúng.
+export const TEMPLATES = ['vite-offline', 'vite-authoritative-mp', 'canvas2d-offline', 'canvas2d-authoritative-mp', 'turn-based-mp', 'party-relay'] as const
+
+/** Mốc `arcade new` để lại trong spec.json: còn mốc là spec chưa viết xong. */
+export const FILL = '__FILL__'
 
 export type BalanceRule = { param: string; constraint: string; why: string; value?: string | number }
 
@@ -96,8 +101,16 @@ export function parseSpec(src: string): { spec?: GameSpec; problems: Problem[] }
       typeof e?.name === 'string' && Array.isArray(e.props) && e.props.every((p) => typeof p === 'string'))
     if (!ok) err('entities', 'phải là mảng { name, props: string[] }')
   }
+  for (const where of fills(d, '')) err(where, `còn mốc ${FILL} — spec chưa viết xong`)
   for (const k of Object.keys(d)) if (!KNOWN.has(k)) warn(k, 'khoá ngoài GameSpec v1 — được giữ, nhưng playtest không đọc nó')
 
   if (problems.some((p) => p.level === 'error')) return { problems }
   return { spec: d as unknown as GameSpec, problems }
+}
+
+function fills(v: unknown, at: string): string[] {
+  if (typeof v === 'string') return v.includes(FILL) ? [at || 'spec.json'] : []
+  if (Array.isArray(v)) return v.flatMap((x, i) => fills(x, `${at}[${i}]`))
+  if (v && typeof v === 'object') return Object.entries(v).flatMap(([k, x]) => fills(x, at ? `${at}.${k}` : k))
+  return []
 }

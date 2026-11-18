@@ -1,0 +1,20 @@
+[game]
+id          = "__GAME_ID__"
+name        = "__GAME_NAME__"
+version     = "0.1.0"
+engine      = "canvas2d"
+orientation = "portrait"
+client_dir  = "dist"
+
+[runtime]
+# Server là chân lý: platform chạy server/room.js (build từ server/room.ts).
+mode        = "authoritative"
+tick_rate   = 20     # = TICK_RATE trong src/shared/config.ts
+max_players = 4      # = MAX_PLAYERS
+
+[capabilities]
+save        = false
+leaderboard = ["daily", "alltime"]
+
+[limits]
+bundle_bytes = 5242880

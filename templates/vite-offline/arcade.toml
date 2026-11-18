@@ -1,0 +1,18 @@
+[game]
+id          = "__GAME_ID__"
+name        = "__GAME_NAME__"
+version     = "0.1.0"
+engine      = "canvas2d"
+orientation = "portrait"
+# Vite build ra dist/: platform phục vụ thư mục này, không phải gốc repo.
+client_dir  = "dist"
+
+[runtime]
+mode = "offline"
+
+[capabilities]
+save        = true
+leaderboard = ["daily", "alltime"]
+
+[limits]
+bundle_bytes = 5242880

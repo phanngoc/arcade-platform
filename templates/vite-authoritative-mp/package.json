@@ -1,0 +1,20 @@
+{
+  "name": "__GAME_ID__",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build:room": "esbuild server/room.ts --bundle --format=iife --global-name=__room --footer:js=\"module.exports=__room.default;\" --target=es2020 --outfile=server/room.js",
+    "build": "tsc --noEmit && vite build && npm run build:room",
+    "preview": "vite preview --port 4173",
+    "test": "npm run build:room && vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "20.16.10",
+    "esbuild": "0.21.5",
+    "typescript": "5.6.2",
+    "vite": "5.4.8",
+    "vitest": "2.1.2"
+  }
+}
