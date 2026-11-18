@@ -1,12 +1,3 @@
----
-name: game-playtest
-version: 1.0.0
-description: |
-  Verify một game bằng browser headless theo 4 cổng: tĩnh, boot, chơi được, multiplayer.
-  Dùng sau /game-build hoặc /game-iterate. Đây là cổng duy nhất quyết định game được publish hay không.
-allowed-tools: [Bash, Read, Write, Edit, Glob, Grep]
----
-
 # game-playtest — cổng verify
 
 Không có cổng này thì "prompt ra game" chỉ là demo. Chạy tuần tự, fail-fast.
@@ -36,4 +27,4 @@ Dùng `browse`/`gstack` hoặc Playwright MCP.
 
 ## Báo cáo
 Bảng pass/fail từng cổng + screenshot của lần fail đầu tiên + log lỗi.
-**Fail thì không publish.** Chuyển sang /game-iterate với đúng log đó, tối đa 3 vòng, rồi trả về cho người.
+**Fail thì không publish.** Chuyển sang `stages/iterate.md` với đúng log đó, tối đa 3 vòng, rồi trả về cho người.

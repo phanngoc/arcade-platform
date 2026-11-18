@@ -437,7 +437,7 @@ create policy own_save on saves
 
 ## 8. AI Forge — prompt thành game
 
-> Forge **không phải thiết kế mới** — nó là 5 skill trong [`skills/`](skills/) đã dùng để làm tank-battle,
+> Forge **không phải thiết kế mới** — nó là 5 bước của plugin [`game-studio`](.agents/plugins/game-studio/) đã dùng để làm tank-battle,
 > castle, rumba, chạy tự động: `/game-spec` → `/game-build` → `/game-playtest` → `/game-ship`, với
 > `/game-iterate` là vòng sửa. Chi tiết và cách đóng gói 3 tầng: [SKILL_CHAIN.md](SKILL_CHAIN.md).
 > Các skill file là **nguồn chân lý duy nhất**: Forge đọc chính chúng làm system prompt, không viết lại.
