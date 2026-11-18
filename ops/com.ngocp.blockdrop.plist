@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Server tĩnh riêng của blockdrop, CHỈ dùng cho đường rollback.
+       Bình thường game được platform (com.ngocp.arcade) phục vụ ở
+       drop.bomclaw.org, service này KHÔNG nạp. ops/rollback.sh nạp nó khi
+       platform có vấn đề — nếu không thì rollback sẽ làm drop.bomclaw.org
+       chết im lặng, vì đây là game duy nhất không có sẵn server riêng đang chạy. -->
+  <key>Label</key>
+  <string>com.ngocp.blockdrop</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/ngocp/.nvm/versions/node/v24.13.0/bin/node</string>
+    <string>/Users/ngocp/goterm-workspace/games/blockdrop/server.js</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/ngocp/goterm-workspace/games/blockdrop</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/ngocp/.nvm/versions/node/v24.13.0/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>PORT</key><string>8790</string>
+    <key>HOST</key><string>127.0.0.1</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/Users/ngocp/goterm-workspace/games/ops/blockdrop.log</string>
+  <key>StandardErrorPath</key><string>/Users/ngocp/goterm-workspace/games/ops/blockdrop.log</string>
+</dict>
+</plist>

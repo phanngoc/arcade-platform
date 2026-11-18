@@ -54,6 +54,7 @@ switch (cmd) {
       'packages/protocol/test/roomcode.test.ts',
       'packages/core/test/redis-keys.test.ts',
       'packages/services/test/api.test.ts',
+      'packages/services/test/hub.test.ts',
       'packages/roomd/test/realtime.test.ts',
     ]])
     console.log('\n✓ tất cả cổng đã qua')

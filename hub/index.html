@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0b16">
+<title>Arcade — chơi và tạo game</title>
+<meta name="description" content="Chơi game arcade ngay trên trình duyệt, hoặc tự tạo game của bạn trong vài giây.">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0d0b16;--card:#181430;--line:#2a2350;--fg:#f4f2ff;--dim:#a49fc4;--acc:#a78bfa}
+  html,body{background:var(--bg);color:var(--fg);
+    font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+  body{padding:0 16px calc(env(safe-area-inset-bottom) + 40px);max-width:960px;margin:0 auto}
+  header{padding:28px 0 14px}
+  h1{font-size:clamp(24px,6vw,34px);letter-spacing:-.5px}
+  h1 span{color:var(--acc)}
+  .sub{color:var(--dim);font-size:14px;margin-top:6px}
+  nav{display:flex;gap:8px;margin:18px 0;position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:5}
+  nav button{flex:1;font:inherit;font-weight:600;padding:11px;border-radius:12px;border:1px solid var(--line);
+    background:transparent;color:var(--dim);cursor:pointer}
+  nav button[aria-selected=true]{background:var(--acc);color:#180f2e;border-color:var(--acc)}
+  section[hidden]{display:none}
+  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr))}
+  a.card{display:block;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;
+    text-decoration:none;color:inherit}
+  a.card:active{transform:scale(.99)}
+  .card h3{font-size:16px}
+  .card p{color:var(--dim);font-size:13px;margin-top:4px;min-height:2.6em}
+  .tag{display:inline-block;font-size:11px;color:var(--acc);border:1px solid var(--line);border-radius:999px;
+    padding:2px 8px;margin-top:8px}
+  form{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;display:grid;gap:14px}
+  label{font-size:13px;color:var(--dim);display:block;margin-bottom:6px}
+  input[type=text]{width:100%;font:inherit;padding:12px;border-radius:10px;border:1px solid var(--line);
+    background:#0f0c1e;color:var(--fg)}
+  input[type=range]{width:100%;accent-color:var(--acc)}
+  .tpl{display:grid;gap:8px}
+  .tpl button{text-align:left;font:inherit;padding:12px;border-radius:12px;border:1px solid var(--line);
+    background:#0f0c1e;color:var(--fg);cursor:pointer}
+  .tpl button[aria-pressed=true]{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+  .tpl small{display:block;color:var(--dim);margin-top:2px}
+  button.primary{font:inherit;font-weight:700;padding:14px;border-radius:999px;border:0;background:var(--acc);
+    color:#180f2e;cursor:pointer}
+  button.primary[disabled]{opacity:.5;cursor:progress}
+  #status{font-size:14px;color:var(--dim);min-height:1.4em}
+  #status.ok{color:#6ee7b7} #status.err{color:#fca5a5}
+  footer{margin-top:32px;color:var(--dim);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <h1>Arcade <span>·</span> chơi &amp; tạo game</h1>
+  <p class="sub">Chơi ngay trên trình duyệt, không cần cài đặt. Hoặc tự dựng một game của riêng bạn.</p>
+</header>
+
+<nav role="tablist">
+  <button id="tab-play" role="tab" aria-selected="true" aria-controls="play">Chơi</button>
+  <button id="tab-make" role="tab" aria-selected="false" aria-controls="make">Tạo game</button>
+</nav>
+
+<section id="play" role="tabpanel">
+  <div class="grid" id="list"><p class="sub">Đang tải danh mục…</p></div>
+</section>
+
+<section id="make" role="tabpanel" hidden>
+  <form id="forge">
+    <div>
+      <label for="title">Tên game</label>
+      <input type="text" id="title" maxlength="32" placeholder="Ví dụ: Sao băng của Ngọc" required>
+    </div>
+    <div>
+      <label>Kiểu chơi</label>
+      <div class="tpl" id="tpl"></div>
+    </div>
+    <div>
+      <label for="hue">Màu chủ đạo <output id="hueOut"></output></label>
+      <input type="range" id="hue" min="0" max="359" value="285">
+    </div>
+    <div>
+      <label for="speed">Tốc độ <output id="speedOut">3</output>/5</label>
+      <input type="range" id="speed" min="1" max="5" value="3">
+    </div>
+    <div>
+      <label for="density">Mật độ vật thể <output id="densityOut">3</output>/5</label>
+      <input type="range" id="density" min="1" max="5" value="3">
+    </div>
+    <button class="primary" type="submit" id="submit">Tạo game</button>
+    <p id="status"></p>
+  </form>
+  <div class="grid" id="mine" style="margin-top:16px"></div>
+</section>
+
+<footer>Arcade platform · game bạn tạo được lưu lại và chơi qua đường dẫn riêng.</footer>
+
+<script>
+(function(){
+'use strict';
+var API = location.origin;
+var $ = function(id){ return document.getElementById(id); };
+
+// ── tabs ──────────────────────────────────────────────────────────────────
+function tab(name){
+  ['play','make'].forEach(function(n){
+    $(n).hidden = n !== name;
+    $('tab-'+n).setAttribute('aria-selected', String(n === name));
+  });
+  if(name === 'make') ensureAuth().then(loadMine);
+}
+$('tab-play').onclick = function(){ tab('play'); };
+$('tab-make').onclick = function(){ tab('make'); };
+
+// ── danh mục ──────────────────────────────────────────────────────────────
+fetch(API + '/v1/games').then(function(r){ return r.json(); }).then(function(j){
+  var el = $('list'); el.innerHTML = '';
+  if(!j.games || !j.games.length){ el.innerHTML = '<p class="sub">Chưa có game nào.</p>'; return; }
+  j.games.forEach(function(g){
+    var a = document.createElement('a');
+    a.className = 'card'; a.href = g.playUrl;
+    var h = document.createElement('h3'); h.textContent = g.name; a.appendChild(h);
+    var p = document.createElement('p'); p.textContent = g.tagline || 'Chạm để chơi.'; a.appendChild(p);
+    var t = document.createElement('span'); t.className = 'tag';
+    t.textContent = g.createdFrom === 'forge' ? 'do người chơi tạo' : (g.mode === 'authoritative' ? 'nhiều người chơi' : 'chơi đơn');
+    a.appendChild(t);
+    el.appendChild(a);
+  });
+}).catch(function(){ $('list').innerHTML = '<p class="sub">Không tải được danh mục.</p>'; });
+
+// ── auth guest cho hub ────────────────────────────────────────────────────
+var tok = null;
+function ensureAuth(){
+  if(tok) return Promise.resolve(tok);
+  var saved = localStorage.getItem('hub:refresh');
+  var p = saved
+    ? fetch(API+'/v1/auth/refresh',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({refreshToken:saved})}).then(function(r){ return r.ok ? r.json() : null; })
+    : Promise.resolve(null);
+  return p.then(function(j){
+    if(j && j.accessToken){ tok = j.accessToken; return tok; }
+    return fetch(API+'/v1/auth/guest',{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({gameId:'hub'})}).then(function(r){ return r.json(); }).then(function(k){
+        tok = k.accessToken; if(k.refreshToken) localStorage.setItem('hub:refresh', k.refreshToken); return tok;
+      });
+  });
+}
+
+// ── template + form ───────────────────────────────────────────────────────
+var picked = 'collect';
+fetch(API+'/v1/forge/templates').then(function(r){ return r.json(); }).then(function(j){
+  var box = $('tpl'); box.innerHTML='';
+  j.templates.forEach(function(t){
+    var b = document.createElement('button'); b.type='button';
+    b.setAttribute('aria-pressed', String(t.id === picked));
+    b.innerHTML = '<strong></strong><small></small>';
+    b.querySelector('strong').textContent = t.name;
+    b.querySelector('small').textContent = t.blurb;
+    b.onclick = function(){
+      picked = t.id;
+      Array.prototype.forEach.call(box.children, function(c){ c.setAttribute('aria-pressed','false'); });
+      b.setAttribute('aria-pressed','true');
+    };
+    box.appendChild(b);
+  });
+});
+function bindRange(id){
+  var el = $(id), out = $(id+'Out');
+  var upd = function(){ out.textContent = el.value; if(id==='hue') out.style.color = 'hsl('+el.value+' 90% 65%)'; };
+  el.oninput = upd; upd();
+}
+bindRange('hue'); bindRange('speed'); bindRange('density');
+
+function loadMine(){
+  fetch(API+'/v1/forge/mine',{headers:{authorization:'Bearer '+tok}})
+    .then(function(r){ return r.ok ? r.json() : {games:[]}; }).then(function(j){
+      var el = $('mine'); el.innerHTML='';
+      j.games.forEach(function(g){
+        var a = document.createElement('a'); a.className='card'; a.href=g.playUrl;
+        var h=document.createElement('h3'); h.textContent=g.name; a.appendChild(h);
+        var p=document.createElement('p'); p.textContent='Game của bạn — chạm để chơi.'; a.appendChild(p);
+        el.appendChild(a);
+      });
+    }).catch(function(){});
+}
+
+$('forge').onsubmit = function(e){
+  e.preventDefault();
+  var st = $('status'); st.className=''; st.textContent = 'Đang tạo…';
+  $('submit').disabled = true;
+  ensureAuth().then(function(){
+    return fetch(API+'/v1/forge/games',{method:'POST',
+      headers:{'content-type':'application/json',authorization:'Bearer '+tok},
+      body: JSON.stringify({ title: $('title').value, template: picked,
+        hue: +$('hue').value, speed: +$('speed').value, density: +$('density').value })});
+  }).then(function(r){
+    return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || 'LỖI'); return j; });
+  }).then(function(j){ return poll(j.jobId, 25); })
+  .then(function(job){
+    st.className='ok';
+    st.innerHTML = 'Xong! ';
+    var a = document.createElement('a'); a.href = job.playUrl; a.textContent = 'Chơi ngay →';
+    a.style.color = 'var(--acc)'; st.appendChild(a);
+    loadMine();
+  })
+  .catch(function(err){ st.className='err'; st.textContent = 'Không tạo được: ' + err.message; })
+  .then(function(){ $('submit').disabled = false; });
+};
+
+function poll(jobId, left){
+  return fetch(API+'/v1/forge/jobs/'+jobId,{headers:{authorization:'Bearer '+tok}}).then(function(r){ return r.json(); }).then(function(j){
+    if(j.status === 'ready') return j;
+    if(j.status === 'failed') throw new Error(j.error || 'FORGE_FAILED');
+    if(left <= 0) throw new Error('TIMEOUT');
+    $('status').textContent = 'Đang dựng game…';
+    return new Promise(function(res){ setTimeout(res, 400); }).then(function(){ return poll(jobId, left-1); });
+  });
+}
+})();
+</script>
+</body>
+</html>

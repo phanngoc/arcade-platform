@@ -14,4 +14,8 @@ ingress:
     service: http://127.0.0.1:8788
   - hostname: castle.bomclaw.org
     service: http://127.0.0.1:8789
+  # blockdrop ra đời sau platform: đường rollback trỏ về server tĩnh riêng của
+  # nó (com.ngocp.blockdrop, cổng 8790) chứ không phải platform.
+  - hostname: drop.bomclaw.org
+    service: http://127.0.0.1:8790
   - service: http_status:404
